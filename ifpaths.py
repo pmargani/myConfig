@@ -560,12 +560,37 @@ def test4():
         assert len(paths) == 2
         # print("VEGAS paths: ", rx, paths)
 
+def test5():
+    "Finds paths for 'Cont. with Rcvr1_2' config"
+
+    # from TINT tests
+
+    expCabling = [
+        ['Rcvr1_2:J3', 'R1_2XL:0', 'R1_2XL:1', 'IFRouter:J2', 'SWITCH1', 'IFXS9:thru', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:J1'],
+        ['Rcvr1_2:J4', 'R1_2YR:0', 'R1_2YR:1', 'IFRouter:J18', 'SWITCH3', 'IFXS10:thru', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:J3']
+    ]
+    exp = [
+        ['Rcvr1_2:XL', 'R1_2XL:0', 'R1_2XL:1', 'IFRouter:J2', 'SWITCH1', 'IFXS9:thru', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'],
+        ['Rcvr1_2:YR', 'R1_2YR:0', 'R1_2YR:1', 'IFRouter:J18', 'SWITCH3', 'IFXS10:thru', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3']
+    ]
+
+    rx = "Rcvr1_2"
+    fn = "zdb.201118.pkl.%s.txt" % rx
+    g = getGraph(rx, filepath=fn)
+    paths = chooseDcrPaths(g, rx, 1, debug=False)
+    # print("DCR paths: ", rx, paths)
+    assert len(paths) == 2
+    assert paths[0] == exp[0]
+    assert paths[1] == exp[1]
+
 def main():
     # make sure it all works
     test1()
     test2()
     test3()
     test4()
+    test5()
     print("completed all tests")
+
 if __name__ == '__main__':
     main()
