@@ -1,4 +1,5 @@
-from copy import copy
+from copy import copy, deepcopy
+import math
 
 import numpy as np
 
@@ -85,7 +86,7 @@ def savePaths(g, paths, wins):
         saveInfo(path, "OpticalDriver", ifpathInfo, deviceIdKey='opticalDriver')
         saveInfo(path, "SWITCH", ifpathInfo, deviceIdKey='IFRackSw')
 
-        ifpathInfo[RAWPATHS] = wins
+        ifpathInfo[RAWPATHS] = deepcopy(wins)
 
         # TBF: if 'rawpaths' not in this path, 
         # do something for DCR: ifpathInfo["restfreq"] = config["DOPPLERTRACKFREQ"] 
@@ -299,37 +300,139 @@ def compute_Flocal(config):
     
     return cur_vhigh
 
-def computeLO2(freqToOffset, if1, config, paths):
+def computeLO2(freqToOffset, if0, if1, config, paths):
     receiver = config['receiver']
+    be = config['backend']
     multiplier1 = RCVR_SIDEBAND[receiver]
     lo2freq = config['lo2freq']
     lo3freq = 10500
+
 
     multiplier2 = 1
     tmpMult = multiplier1 * multiplier2
     ifComputeDiff = 0
 
+    lo2HighCutoff = 17900.0
+    lo2LowCutoff = 10501.0
+    lo2s = []
+    lo2_low_adjust = 0
+    lo2_high_adjust = 0
+    doppler_lo2 = None
+    int_doppler_lo2 = None
+
+    freq_w_avg_vel_Doppler = None
+
     if lo2freq[0] == 0:
-        for path in paths:
+        for i, path in enumerate(paths):
+            print ("")
+            print (i, path, path[RAWPATHS][0])
             if "vel_freq" in path and "cm" in path:
+
                 centerIf3 = path[RAWPATHS][0]["if3"]
                 velFreq = float(path["vel_freq"])
-                if1Eff = tmpMult * velFreq - freqToOffset + if1 + ifComputeDiff
+                print("if1Eff from", tmpMult, velFreq, freqToOffset, if1, ifComputeDiff)
+                if1Eff = tmpMult * (velFreq - freqToOffset) + if1 + ifComputeDiff
                 lo2 = (if1Eff + lo3freq - centerIf3)
+                print("new lo2 from", if1Eff, centerIf3)
                 print("new lo2", lo2)
                 path['lo2'] = lo2
                 rawpath0 = path[RAWPATHS][0]
-                for raw in path[RAWPATHS]:
+                for j, raw in enumerate(path[RAWPATHS]):
                     if isinstance(raw, dict):
                         if ("mode" in rawpath0 and rawpath0["mode"] > 19):
-                            if3 = (tmpMult * velFreq - freqToOffset) + if1 + ifComputeDiff + lo3freq - lo2
+                            print ("mode > 19")
+                            if3 = (tmpMult * (float(raw['vel_freq']) - freqToOffset)) + if1 + ifComputeDiff + lo3freq - lo2
                         else:    
                             if3 = rawpath0['if3']
                             path["if3"] = if3
-                        raw["if3"] = if3    
+                        raw["if3"] = if3
+                        print ("Now if3 in this rawpath", j, if3)    
+                if velFreq == freq_w_avg_vel_Doppler:
+                    doppler_lo2 = lo2
+                    int_doppler_lo2 = int(lo2 * 1000.0 + 0.49)
+                    int_doppler_lo2 = int_doppler_lo2 * 0.001
+                int_lo2 = int(lo2 * 1000.0 + 0.49)  
+                round_lo2 = int_lo2 * 0.001
+                path["lo2"] = round_lo2
+                if round_lo2 > lo2HighCutoff:
+                    print (" lo2 too high needs lo2 adjustment")
+                    print ("self.round_lo2 ", round_lo2)
+                    # lo2_high_adjust = max(
+                        # lo2_high_adjust, self.round_lo2 - lo2HighCutoff)
+                    # print "lo2_high_adjust ", lo2_high_adjust
+                elif round_lo2 < lo2LowCutoff:
+                    print (" lo2 too low needs lo2 adjustment")
+                    lo2_low_adjust = min(
+                        lo2_low_adjust, round_lo2 - lo2LowCutoff)
+
+    if doppler_lo2 is not None and int_doppler_lo2 is not None:
+        epsfreq = doppler_lo2 - int_doppler_lo2
+        new_if1 = if1 - epsfreq
+        new_if0 = if0 - epsfreq
+    else:
+        if receiver != "Holography" and be != "VEGAS":
+            print("Warning: The doppler tracking frequency was not one of"
+                  " the specified rest frequencies. The telescope is "
+                  "being configured as specified but if this was not "
+                  "intentional, please fix and re-submit")
+        epsfreq = 0
+        new_if1 = if1 - epsfreq
+        new_if0 = if0 - epsfreq
+    print("new_if0, if1:", new_if0, new_if1)
+
+    if lo2_high_adjust != 0 and lo2_low_adjust != 0:
+        print( "Frequency spread is too great -- setup will be incorrect!")
+    if lo2_high_adjust != 0 or lo2_low_adjust != 0:
+        print("Warning: LO2 out of range, adjusting LO2 and IF1 by {}"
+              "".format(lo2_high_adjust + lo2_low_adjust))
+        new_if1 -= multiplier2 * (lo2_high_adjust + lo2_low_adjust)
+        new_if0 -= multiplier2 * (lo2_high_adjust + lo2_low_adjust)
+        for path in paths:
+            if "lo2" in path:
+                adjusted = (lo2_high_adjust + lo2_low_adjust)
+                lo2 -= adjusted
+                print("adjusted lo2", lo2)
+                path["lo2"] = lo2
+
+    lo1_est = freqToOffset - multiplier1 * new_if0
+    print("lo1 estimated:", lo1_est)
+    center_freq = new_if0
+
+    lo1synth = lo1_est * 1e6
+
+    print("lo1synth", lo1synth)
+    # lofreq = ((self.lo_restfreq +
+    #                     self.sidebandmult * self.center_freq) /
+    #                    self.lo_multiplier)
 
     # TBF!  more stuff, but what do we need???
 
+def set_if_filters(iffilter_center, ifpath):
+    """Set IF filters"""
+    # TBF interim solution, is IFrack bw part of path list or not?
+    # Some backends yes, some backends no.
+    params = []
+    for path in ifpath:
+        filter_value = "pass_all"
+        param = None
+        if "ifrack_bw" in path:
+            total_bw_low = iffilter_center - (0.5 * path["ifrack_bw"])
+            total_bw_high = iffilter_center + (0.5 * path["ifrack_bw"])
+            total_bw_low = math.ceil(total_bw_low)
+            total_bw_high = math.floor(total_bw_high)
+            # if 0 == isinstance(rcvr, RcvrPF_1):
+            if True:
+                for f in IFfilters:
+                    if f[1] <= total_bw_low and f[2] >= total_bw_high:
+                        filter_value = f[0]
+                        break
+            if "opticalDriver" in path:
+                filterNum = path["opticalDriver"]
+                param = "filter_select,{}".format(filterNum)
+
+                # self.seq.add_param(self.mng, fs, self.filter_value)
+        params.append((param, filter_value))
+    return params    
 
 def calcFreqs(config, ifPath):
     # At minimum:
@@ -400,8 +503,22 @@ def calcFreqs(config, ifPath):
     print("IFs:", if0, if1, if3s)    
 
     # lo1aFreq = (self.flocal + self.if1) / 2.0
+    RCVR_IF_NOMINAL[receiver]
+    ifRackFilters = set_if_filters(RCVR_IF_NOMINAL[receiver], ifPath)
+    print("ifRackFilters: ", ifRackFilters)
 
-    computeLO2(freqLocal, if1, config, ifPath)
+    computeLO2(freqLocal, if0, if1, config, ifPath)
+
+    print("LO2 settings")
+    keys = ['beam', 'cm', 'xsw', 'opticalDriver', 'IFRackSw', 'backendPort']
+    for p in ifPath:
+        vs = ["%s = %s" % (k, p[k]) for k in keys]
+        print (",".join(vs))
+        for r in p['rawpaths']:
+            print ("  restfreq, if3", r['restfreq'], r['if3'])
+        print("LO2: ", p["lo2"])
+        param = "ConverterRack,GFrequency,%s" % p['cm']
+        print("Set param %s = %f" % (param, p["lo2"]))
 
 def test1():
     "Mimics VEGASTests.testBasic"
@@ -623,15 +740,15 @@ def test1():
 
     # 2965.00 to 3040.00 (75.00): 3002.50, 3040.00  change:  OpticalDriver3:F3 (filter) Freq: 2960 to 3040 MHz
     #                    <*>                                                            
-    # 3.
+    # 3. CHECK!
 
     # 9710.00 to 9785.00 (75.00): 9747.50, 9710.00  change:  ConverterModule5:MX2 (mixer) frequency: 12750 sideband: lower name: LO2_G1:synthesizer
     #                                                                                <*>
-    # 4. TBF: ConvertRack,GFrequency,1 set by path["lo2"].  I'm not done calculating this value, but's currently != 12750.  Curious.
+    # 4. CHECK! We are setting ConverterRack,GFrequency,1 and 5 to 12750!
 
     # 715.00 to 790.00 (75.00): 752.50, 790.00  change:  ConverterModule5:MX3 (mixer) frequency: 10500 sideband: lower name: LO3Distribution1:synthesizer
     # <> 
-    # 5.
+    # 5. CHECK!  This is a fixed mixer
 
 def test2():
     "Mimics Configure('Continuum with Rcvr1_2')"
