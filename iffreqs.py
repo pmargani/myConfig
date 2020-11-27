@@ -231,12 +231,50 @@ def computeBW(paths):
         #                                  BeamIFRackfreqs[beam][2])
         #             path["ifrackModFreq"] = BeamIFRackfreqs[beam]
 
+    receiverBW = None
     if bandwidths != []:
         receiverBW = minMaxFreqsPath.computeBW(bw=max(bandwidths))
-    paths[0]["receiver_bw"] = receiverBW
+        paths[0]["receiver_bw"] = receiverBW
     return receiverBW
 
+
 def setFreqWithVelocity(config, paths):
+    be = config['backend']
+    return setFreqWithVelocityDCR(config, paths) if be == 'DCR' else setFreqWithVelocityVegas(config, paths)
+
+def setFreqWithVelocityDCR(config, paths):
+
+    vlow = config['vlow']
+    vhigh = config['vhigh']
+    vdef = config['vdef']
+
+    # for no doppler affect, I think we do this:
+    config['freq'] = config['restfreq']
+    config['dfreq'] = 0
+
+    user_freqs = [config["freq"]]
+    user_dfreqs = [config["dfreq"]]
+
+    freqs = user_freqs
+    dfreqs = user_dfreqs
+
+    vd = Vdef()
+    minMaxFreqs = MinMaxFreqs()
+
+    freqList = []
+    freqAvgVels = []
+
+    for freq, dfreq in zip(freqs, dfreqs):
+        vd.compute_local_frame_with_vdef(vdef, vhigh, freq, vlow)
+        minMaxFreqs.setMin(vd.cur_vlow + dfreq)
+        minMaxFreqs.setMax(vd.cur_vhigh + dfreq)
+        vel_freq = vd.get_vave() + dfreq
+        freqAvgVels.append(vel_freq)
+        freqList.append(vel_freq)
+
+    return freqList, dfreqs, freqAvgVels, minMaxFreqs
+        
+def setFreqWithVelocityVegas(config, paths):
     print("config", config)
     vlow = config['vlow']
     vhigh = config['vhigh']
@@ -246,6 +284,7 @@ def setFreqWithVelocity(config, paths):
 
     freqs = []
     dfreqs = []
+    freqAvgVels = []
 
     minMaxFreqs = MinMaxFreqs()
 
@@ -261,12 +300,13 @@ def setFreqWithVelocity(config, paths):
             vel_freq = vd.get_vave() + dfreq
             path["vel_freq"] = vel_freq 
             path["freq"] = path["aveFreq"]
+            freqAvgVels.append(vel_freq)
             freqs.append(vel_freq)
             dfreqs.append(dfreq)
 
     # TBF: set_all_path_freqs?
 
-    return freqs, dfreqs, minMaxFreqs
+    return freqs, dfreqs, freqAvgVels, minMaxFreqs
 
 def setRestFreq(path):
     mmf = MinMaxFreqs()
@@ -407,6 +447,26 @@ def computeLO2(freqToOffset, if0, if1, config, paths):
 
     # TBF!  more stuff, but what do we need???
 
+def set_if_filters_oldstyle(total_bw_low, total_bw_high, ifpath):
+
+    params = []
+    for path in ifpath:
+        filter_value = "pass_all"
+        param = None
+
+        if True:
+            for f in IFfilters:
+                if f[1] <= total_bw_low and f[2] >= total_bw_high:
+                    filter_value = f[0]
+                    break
+        if "opticalDriver" in path:
+            filterNum = path["opticalDriver"]
+            param = "IFRack,filter_select,{}".format(filterNum)
+
+                # self.seq.add_param(self.mng, fs, self.filter_value)
+        params.append((param, filter_value))
+    return params  
+
 def set_if_filters(iffilter_center, ifpath):
     """Set IF filters"""
     # TBF interim solution, is IFrack bw part of path list or not?
@@ -428,47 +488,63 @@ def set_if_filters(iffilter_center, ifpath):
                         break
             if "opticalDriver" in path:
                 filterNum = path["opticalDriver"]
-                param = "filter_select,{}".format(filterNum)
+                param = "IFRack,filter_select,{}".format(filterNum)
 
                 # self.seq.add_param(self.mng, fs, self.filter_value)
         params.append((param, filter_value))
     return params    
 
 def calcFreqs(config, ifPath):
+
+    # we'll return what manager parameters are set here
+    params = []
+
     # At minimum:
     # set filters in receiver
     # set LO1 freq
     # set optical driver freqs
     
     receiver = config['receiver']
+    backend = config['backend']
 
     # first see if there's a doppler shift
     if config['vframe'] is not None and config['vframe'] != 'topo':
         # can't handle this
         assert False
 
+    # doppler shit sux
+    if 'DOPPLERTRACKFREQ' not in config:
+        config['DOPPLERTRACKFREQ'] = config['restfreq']
+
+    if 'lo2freq' not in config:
+        config['lo2freq'] = [0]
+
     # we need the tuning freq of our receiver
     # only one tuning freq, so just look at the first path?
     ifp = ifPath[0]
     paths = ifp['rawpaths']
-    restfreqs = [p['restfreq'] for p in paths]
-    tuningFreq = np.mean(restfreqs)    
+    if len(paths) > 0:
+        restfreqs = [p['restfreq'] for p in paths]
+
+        tuningFreq = np.mean(restfreqs)    
+    else:
+        tuningFreq = config['restfreq']
 
     print("tuning freq", tuningFreq)
 
-    bwTotal = computeBW(ifPath)
+    if backend != 'DCR':
+        bwTotal = computeBW(ifPath)
+    else:
+        bwTotal = config['bandwidth']
 
     print("BW: ", bwTotal)
 
-    # 1) filter to set in receiver!
-    filterSetting, filterLo, filterHi = setRxFilters(receiver, tuningFreq, bwTotal)
 
-    print("Receiver filter: ", filterSetting, filterLo, filterHi)
 
     # now we can see how the band pass changes at this stage?
 
-    # 2) set the LO1 freq to match the IF2.  That seems to be 3000; always?
-    freq, vfreq, minMaxFreqs = setFreqWithVelocity(config, ifPath)
+    # 2) set the LO1 freq to match the IF1.  That seems to be 3000; always?  No.
+    freq, vfreq, _, minMaxFreqs = setFreqWithVelocity(config, ifPath)
     span = minMaxFreqs.maxf - minMaxFreqs.minf
     skyFreq = minMaxFreqs.avgFreqs()
     ifNom = RCVR_IF_NOMINAL[receiver]
@@ -479,6 +555,22 @@ def calcFreqs(config, ifPath):
     if1 = (multiplier1 * (freqLocal - skyFreq) + ifNom)
     if0 = if1
     print("IF1", if1)
+
+    # 1) filter to set in receiver!
+    if receiver in ["Rcvr8_10"]:
+        # fitler is AFTER LO1
+        filterFreq = if1
+
+    else:
+        # filter are BEFORE LO1
+        filterFreq = tuningFreq
+
+    filterSetting, filterLo, filterHi = setRxFilters(receiver, filterFreq, bwTotal)
+
+    print("Receiver filter: ", filterSetting, filterLo, filterHi)
+    for x in ['left', 'right']:
+        paramName = "%s,%sIfFilterSwitch" % (receiver, x)
+        params.append((paramName, filterSetting))
 
     # now we can see how the band pass changes by mixing in the LO1
     # LO1 params set:
@@ -492,6 +584,11 @@ def calcFreqs(config, ifPath):
     print("LO1,ifCenterFreq", centerFreq)
     print("LO1 derived mixing freq", centerFreq + config["DOPPLERTRACKFREQ"])
 
+    params.append(("LO1,restFrequency", config["DOPPLERTRACKFREQ"]))
+    params.append(("LO1,velocityDefinition", config["vdef"]))
+    params.append(("LO1,sourceVelocity,position", velocity))
+    params.append(("LO1,restFrame", velframe))
+    params.append(("LO1,ifCenterFreq", centerFreq))
     
     # what about the IF2, LO2 settings?
     if3s = []
@@ -503,22 +600,36 @@ def calcFreqs(config, ifPath):
     print("IFs:", if0, if1, if3s)    
 
     # lo1aFreq = (self.flocal + self.if1) / 2.0
-    RCVR_IF_NOMINAL[receiver]
-    ifRackFilters = set_if_filters(RCVR_IF_NOMINAL[receiver], ifPath)
+    # RCVR_IF_NOMINAL[receiver]
+    if backend == "VEGAS":
+        ifRackFilters = set_if_filters(RCVR_IF_NOMINAL[receiver], ifPath)
+    else:    
+        centerFreq = RCVR_IF_NOMINAL[receiver]
+        low = centerFreq - (bwTotal*.5)
+        high = centerFreq + (bwTotal*.5)
+        ifRackFilters = set_if_filters_oldstyle(low, high, ifPath)
     print("ifRackFilters: ", ifRackFilters)
+    for f in ifRackFilters:
+        params.append(f)
 
-    computeLO2(freqLocal, if0, if1, config, ifPath)
+    if backend == "VEGAS":
+        computeLO2(freqLocal, if0, if1, config, ifPath)
 
-    print("LO2 settings")
-    keys = ['beam', 'cm', 'xsw', 'opticalDriver', 'IFRackSw', 'backendPort']
-    for p in ifPath:
-        vs = ["%s = %s" % (k, p[k]) for k in keys]
-        print (",".join(vs))
-        for r in p['rawpaths']:
-            print ("  restfreq, if3", r['restfreq'], r['if3'])
-        print("LO2: ", p["lo2"])
-        param = "ConverterRack,GFrequency,%s" % p['cm']
-        print("Set param %s = %f" % (param, p["lo2"]))
+        # report results
+        print("LO2 settings")
+        keys = ['beam', 'cm', 'xsw', 'opticalDriver', 'IFRackSw', 'backendPort']
+        for p in ifPath:
+            vs = ["%s = %s" % (k, p[k]) for k in keys]
+            print (",".join(vs))
+            for r in p['rawpaths']:
+                print ("  restfreq, if3", r['restfreq'], r['if3'])
+            print("LO2: ", p["lo2"])
+            # set appropriate parameter
+            param = "ConverterRack,GFrequency,%s" % p['cm']
+            print("Set param %s = %f" % (param, p["lo2"]))
+            params.append((param, p["lo2"]))
+
+    return params
 
 def test1():
     "Mimics VEGASTests.testBasic"
@@ -618,7 +729,26 @@ def test1():
     # assert ifInfo[0] == exp1
     # assert ifInfo[1] == exp2
 
-    calcFreqs(config, ifInfo)
+    params = calcFreqs(config, ifInfo)
+
+    for p in params:
+        print(p)
+
+    exp = [
+        ('Rcvr1_2,leftIfFilterSwitch', '3'),
+        ('Rcvr1_2,rightIfFilterSwitch', '3'),
+        ('LO1,restFrequency', 1401),
+        ('LO1,velocityDefinition', 'Radio'),
+        ('LO1,sourceVelocity,position', 0.0),
+        ('LO1,restFrame', 'Local'),
+        ('LO1,ifCenterFreq', 3014.0),
+        ('IFRack,filter_select,1', 'pass_2960_3040'),
+        ('IFRack,filter_select,3', 'pass_2960_3040'),
+        ('ConverterRack,GFrequency,1', 12750.0),
+        ('ConverterRack,GFrequency,5', 12750.0),
+    ]
+
+    assert exp == params
 
     # These are the parameters set for the receiver for VEGASTests.testBasic:
        # by DB lookup:
@@ -740,7 +870,8 @@ def test1():
 
     # 2965.00 to 3040.00 (75.00): 3002.50, 3040.00  change:  OpticalDriver3:F3 (filter) Freq: 2960 to 3040 MHz
     #                    <*>                                                            
-    # 3. CHECK!
+    # 3. CHECK! We are setting [('filter_select,1', 'pass_2960_3040'), ('filter_select,3', 'pass_2960_3040')]
+    # But: 2965 != 2960?
 
     # 9710.00 to 9785.00 (75.00): 9747.50, 9710.00  change:  ConverterModule5:MX2 (mixer) frequency: 12750 sideband: lower name: LO2_G1:synthesizer
     #                                                                                <*>
@@ -748,7 +879,7 @@ def test1():
 
     # 715.00 to 790.00 (75.00): 752.50, 790.00  change:  ConverterModule5:MX3 (mixer) frequency: 10500 sideband: lower name: LO3Distribution1:synthesizer
     # <> 
-    # 5. CHECK!  This is a fixed mixer
+    # 5. CHECK!  This is a fixed mixer.  
 
 def test2():
     "Mimics Configure('Continuum with Rcvr1_2')"
@@ -790,6 +921,27 @@ def test2():
     assert paths[0] == exp[0]
     assert paths[1] == exp[1]
 
+    wins = []
+    ifInfo = savePaths(g, paths, wins)
+
+    params = calcFreqs(config, ifInfo)
+
+    for p in params:
+        print(p)
+
+    exp = [
+        ('Rcvr1_2,leftIfFilterSwitch', '3'),
+        ('Rcvr1_2,rightIfFilterSwitch', '3'),
+        ('LO1,restFrequency', 1400),
+        ('LO1,velocityDefinition', 'Radio'),
+        ('LO1,sourceVelocity,position', 0.0),
+        ('LO1,restFrame', 'Local'),
+        ('LO1,ifCenterFreq', 3000.0),
+        ('IFRack,filter_select,1', 'pass_2960_3040'),
+        ('IFRack,filter_select,3', 'pass_2960_3040')
+    ]
+    assert params == exp
+
     # here are the bandpass changes we need to make:
     # Path from Rcvr1_2:J3 to DCR:J1:
     # Bandpass changes:
@@ -799,12 +951,15 @@ def test2():
 
     # 1300.00 to 1450.00 (150.00): 1375.00, 1375.00  change:  Rcvr1_2:FL4L (filter) Freq: 1300 to 1450 MHz
     #         <******>
+    # CHECK!
 
     # 2950.00 to 3100.00 (150.00): 3025.00, 3025.00  change:  Rcvr1_2:MXL (mixer) frequency: 4400 sideband: lower name: LO1A:synthesizer
     #                                                                           <******>
+    # CHECK!
 
     # 2960.00 to 3040.00 (80.00): 3000.00, 3025.00  change:  OpticalDriver1:F3 (filter) Freq: 2960 to 3040 MHz
     #                                                                       <***>       
+    # CHECK!
 
     # So, this is:
     #    * 1 filter in Rcvr1_2
@@ -815,9 +970,132 @@ def test2():
     #   * no doppler tracking
     #   * DCR center IF should be 3000
 
+
+def test3():
+    "Mimics Configure('Continuum with Rcvr2_3')"
+
+
+    # configure from DB
+    config = {
+        'receiver'  : 'Rcvr2_3',
+        'beam' : 'B1',
+        'obstype'   : 'Continuum',
+        'backend'   : 'DCR',
+        'nwin'      : 1,
+        'restfreq'  : 2000,
+        'deltafreq' : 0,
+        'bandwidth' : 80,
+        'swmode'    : "tp",
+        'swtype'    : "none",
+        'swper'     : 0.1,
+        # 'swfreq'    : 0,0,
+        'tint'      : 0.1,
+        'vlow'      : 0.0,
+        'vhigh'     : 0.0,
+        'vframe'    : "topo",
+        'vdef'      : "Radio",
+        'noisecal'  :  "lo",
+        'pol'       : "Linear",
+    }
+        
+    exp = [
+        ['Rcvr2_3:XL', 'R2_3XL:0', 'R2_3XL:1', 'IFRouter:J5', 'SWITCH1', 'IFXS9:thru', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'],
+        ['Rcvr2_3:YR', 'R2_3YR:0', 'R2_3YR:1', 'IFRouter:J21', 'SWITCH3', 'IFXS10:thru', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3']
+    ]
+
+    rx = "Rcvr2_3"
+    fn = "zdb.201118.pkl.%s.txt" % rx
+    g = getGraph(rx, filepath=fn)
+    paths = chooseDcrPaths(g, rx, 1, debug=False)
+    
+    # test paths
+    assert len(paths) == 2
+    assert paths[0] == exp[0]
+    assert paths[1] == exp[1]
+
+
+    wins = []
     ifInfo = savePaths(g, paths, wins)
 
-    calcFreqs(config, ifInfo)
+    params = calcFreqs(config, ifInfo)
+
+    # test freq. related params set
+    exp = [
+        ('Rcvr2_3,leftIfFilterSwitch', '2'),
+        ('Rcvr2_3,rightIfFilterSwitch', '2'),
+        ('LO1,restFrequency', 2000),
+        ('LO1,velocityDefinition', 'Radio'),
+        ('LO1,sourceVelocity,position', 0.0),
+        ('LO1,restFrame', 'Local'),
+        ('LO1,ifCenterFreq', 6000.0),
+        ('IFRack,filter_select,1', 'pass_5960_6040'),
+        ('IFRack,filter_select,3', 'pass_5960_6040')
+    ]
+    assert params == exp
+
+def test4():
+    "Mimics Configure('Continuum with Rcvr8_10')"
+
+
+    # configure from DB
+    config = {
+        'receiver'  : 'Rcvr8_10', # changes from other 'Continuum with *' scripts
+        'beam' : 'B1',
+        'obstype'   : 'Continuum',
+        'backend'   : 'DCR',
+        'nwin'      : 1,
+        'restfreq'  : 9000, # changes
+        'deltafreq' : 0,
+        'bandwidth' : 80,
+        'swmode'    : "tp",
+        'swtype'    : "none",
+        'swper'     : 0.1,
+        # 'swfreq'    : 0,0,
+        'tint'      : 0.1,
+        'vlow'      : 0.0,
+        'vhigh'     : 0.0,
+        'vframe'    : "topo",
+        'vdef'      : "Radio",
+        'noisecal'  :  "lo",
+        'pol'       : "Circular", # changes
+    }
+        
+    rx = "Rcvr8_10"
+    fn = "zdb.201118.pkl.%s.txt" % rx
+    g = getGraph(rx, filepath=fn)
+    paths = chooseDcrPaths(g, rx, 1, debug=False)
+
+    exp = [
+        ['Rcvr8_10:L', 'R8_10XL:0', 'R8_10XL:1', 'IFRouter:J13', 'SWITCH1', 'IFXS9:cross', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'],
+        ['Rcvr8_10:R', 'R8_10YR:0', 'R8_10YR:1', 'IFRouter:J29', 'SWITCH3', 'IFXS10:cross', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3']
+    ]
+        
+    # test paths - these ONLY depend on 'rx' variable above!
+    assert len(paths) == 2
+    assert paths[0] == exp[0]
+    assert paths[1] == exp[1]
+
+
+    wins = []
+    ifInfo = savePaths(g, paths, wins)
+
+    params = calcFreqs(config, ifInfo)
+
+    for p in params:
+        print(p)
+    # test freq. related params set
+    exp = [
+        ('Rcvr8_10,leftIfFilterSwitch', 'narrowband'),
+        ('Rcvr8_10,rightIfFilterSwitch', 'narrowband'),
+        ('LO1,restFrequency', 9000),
+        ('LO1,velocityDefinition', 'Radio'),
+        ('LO1,sourceVelocity,position', 0.0),
+        ('LO1,restFrame', 'Local'),
+        ('LO1,ifCenterFreq', 3000.0),
+        ('IFRack,filter_select,1', 'pass_2960_3040'),
+        ('IFRack,filter_select,3', 'pass_2960_3040')
+    ]
+    assert params == exp
 
 def getTest1ConfigFull():
 
@@ -900,7 +1178,9 @@ def getTest1ConfigFull():
 
 def main():
     test1()
-    # test2()
+    test2()
+    test3()
+    test4()
 
 if __name__ == '__main__':
         main()    
