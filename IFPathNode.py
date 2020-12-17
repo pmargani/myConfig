@@ -98,6 +98,16 @@ class IFPathNode:
             self.ifIfno = IFInfo()
         self.ifInfo.bandpasses = Bandpasses(bandpassList)
 
+
+    def __eq__(self, other): 
+        "comparisons simply use the name of the node"
+
+        if not isinstance(other, IFPathNode):
+            # don't attempt to compare against unrelated types
+            return NotImplemented
+
+        return self.name == other.name
+
     def __str__(self):
         return self.name
 
