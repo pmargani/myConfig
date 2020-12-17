@@ -9,6 +9,8 @@ from MinMaxFreqs import MinMaxFreqs
 from IFPathNode import IFPathNode, IFInfo
 from Bandpasses import Bandpasses, Bandpass
 
+LO1_FIRST_RXS = ['Rcvr8_10']
+
 
 def getBandpassUpToNode(path, targetNode):
     "Returns the bandpass as it appears before the given node"
@@ -67,7 +69,7 @@ def getSortedBackendNodes(paths, backend):
 def getMatchingPaths(paths, start, end):
     "Return those paths that share the given start and end"
     return [path for path in paths if path[0] == start and path[-1] == end]
-
+            
 def getUniqueDeviceNode(path, device):
     "Retrieves node in path that is like given name, assuming it appears just once or never"
     devices = [n for n in path if device in n.name]
@@ -107,6 +109,11 @@ def getArbitraryFirstPath(ifPaths, rx, backend, beam, debug=False):
     if debug:
         print("feed1 nodes:", feed1, starts)
 
+    if debug:
+        print("paths summary")
+        for path in g:
+            print(path[0], path[-1])
+
     # now simply find all the paths from the first of our feeds, to an arbitrary backend node       
     # firstBackendNode = backendNodes[0]
     feed1path = None
@@ -139,6 +146,9 @@ def getDCRPaths(config, pathsFile=None, debug=False):
     beam = 1
 
     paths = getIFPaths(rx, filepath=pathsFile)
+
+    # prune the paths of non-DCR backends
+    paths = [p for p in paths if 'DCR' in p[-1].name]
 
     feed1path = getArbitraryFirstPath(paths, rx, backend, beam, debug=debug)
 
@@ -313,6 +323,24 @@ def setIFFilters(total_bw_low, total_bw_high, ifpath):
         params.append((param, filter_value))
     return params 
 
+def getFilterBandpasses(bp1, rxNode):
+    bps = []
+    bp = copy(bp1)
+    for fName, fLow, fHigh in rxNode.ifInfo.filters:
+        bp = copy(bp)
+        bp.filter(fLow, fHigh)
+        bp.changes = "Filter %s (%f, %f)" % (fName, fLow, fHigh)
+        bps.append(bp)
+    return bps
+
+def getLO1Bandpass(bp1, rxNode, lowerSideband=True):    
+    bpLO1 = copy(bp1)
+    loMixFreq = rxNode.ifInfo.lo['freq']
+    bpLO1.mix(loMixFreq, lowerSideband=lowerSideband)
+    sideband = "lower" if lowerSideband else "upper"
+    bpLO1.changes = "LO %s sideband at %f" % (sideband, loMixFreq)
+    return bpLO1
+
 def calcFreqs(config, paths):
     "Make the bandpass decisions to get our signal to the backend"
 
@@ -364,7 +392,7 @@ def calcFreqs(config, paths):
     # print("IF1", if1)
 
     # 1) filter to set in receiver!
-    if receiver in ["Rcvr8_10"]:
+    if receiver in LO1_FIRST_RXS: #["Rcvr8_10"]:
         # fitler is AFTER LO1
         filterFreq = if1
 
@@ -420,24 +448,17 @@ def calcFreqs(config, paths):
         bpFeed = Bandpass(lo=low, hi=high, target=config['restfreq'])
         bpFeed.changes = 'feed'
         bps = [bpFeed]
+        rxNode = path[0]
 
         # TBF: check the receiver type for filter-lo1 order
-        
-        # now the filters
-        bp = copy(bpFeed)
-        for fName, fLow, fHigh in path[0].ifInfo.filters:
-            bp = copy(bp)
-            bp.filter(fLow, fHigh)
-            bp.changes = "Filter %s (%f, %f)" % (fName, fLow, fHigh)
-            bps.append(bp)
+        if receiver in LO1_FIRST_RXS: #["Rcvr8_10"]:
+            bps.append(getLO1Bandpass(bpFeed, rxNode))
+            bps.extend(getFilterBandpasses(bps[-1], rxNode))
+        else:
+            bps.extend(getFilterBandpasses(bpFeed, rxNode))
+            bps.append(getLO1Bandpass(bps[-1], rxNode))
 
-        # then LO1 mix
-        bpLO1 = copy(bp)
-        loMixFreq = path[0].ifInfo.lo['freq']
-        bpLO1.mix(loMixFreq, lowerSideband=True)
-        bpLO1.changes = "LO lower sideband at %f" % (loMixFreq)
-        bps.append(bpLO1)
-        path[0].setBandpasses(bps)
+        rxNode.setBandpasses(bps)
 
     # What about the IF2, LO2 settings?
     # Does not matter for DCR.
@@ -462,8 +483,8 @@ def calcFreqs(config, paths):
 
     return params
 
-def configureDCR(config, pathsFile=None):
-    paths = getDCRPaths(config, pathsFile=pathsFile)
+def configureDCR(config, pathsFile=None, debug=False):
+    paths = getDCRPaths(config, pathsFile=pathsFile, debug=debug)
     params = calcFreqs(config, paths)
     return paths, params
 
@@ -580,9 +601,70 @@ def test2():
     assert pathNames == expPaths
     assert params == expParams
 
+def test3():
+    "Mimics Configure('Continuum with Rcvr8_10')"
+
+
+    # configure from DB
+    config = {
+        'receiver'  : 'Rcvr8_10', # changes from other 'Continuum with *' scripts
+        'beam' : 'B1',
+        'obstype'   : 'Continuum',
+        'backend'   : 'DCR',
+        'nwin'      : 1,
+        'restfreq'  : 9000, # changes
+        'deltafreq' : 0,
+        'bandwidth' : 80,
+        'swmode'    : "tp",
+        'swtype'    : "none",
+        'swper'     : 0.1,
+        # 'swfreq'    : 0,0,
+        'tint'      : 0.1,
+        'vlow'      : 0.0,
+        'vhigh'     : 0.0,
+        'vframe'    : "topo",
+        'vdef'      : "Radio",
+        'noisecal'  :  "lo",
+        'pol'       : "Circular", # changes
+    }
+        
+
+    rx = config["receiver"]
+    fn = "zdb.201118.pkl.%s.txt" % rx  
+
+    paths, params = configureDCR(config, pathsFile=fn, debug=False)
+
+    # convert list of IFPathNode lists to list of list of strings
+    pathNames = []
+    for path in paths:
+        print (path)
+        pathNames.append([p.name for p in path])
+
+    expPaths = [
+        ['Rcvr8_10:L', 'R8_10XL:0', 'R8_10XL:1', 'IFRouter:J13', 'SWITCH1', 'IFXS9:cross', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'],
+        ['Rcvr8_10:R', 'R8_10YR:0', 'R8_10YR:1', 'IFRouter:J29', 'SWITCH3', 'IFXS10:cross', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3']
+    ]
+
+     # test freq. related params set
+    expParams = [
+        ('Rcvr8_10,leftIfFilterSwitch', 'narrowband'),
+        ('Rcvr8_10,rightIfFilterSwitch', 'narrowband'),
+        ('LO1,restFrequency', 9000),
+        ('LO1,velocityDefinition', 'Radio'),
+        ('LO1,sourceVelocity,position', 0.0),
+        ('LO1,restFrame', 'Local'),
+        ('LO1,ifCenterFreq', 3000.0),
+        ('IFRack,filter_select,1', 'pass_2960_3040'),
+        ('IFRack,filter_select,3', 'pass_2960_3040')
+    ]
+
+    assert pathNames == expPaths
+    assert params == expParams
+
 def main():
     test1()
     test2()
+    test3()
 
 if __name__ == '__main__':
     main()
