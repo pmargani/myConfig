@@ -542,6 +542,8 @@ def test1():
     assert pathNames == expPaths
     assert params == expParams
 
+    compareParams(rx, params)
+
 def test2():
     "Mimics Configure('Continuum with Rcvr2_3')"
 
@@ -600,6 +602,8 @@ def test2():
 
     assert pathNames == expPaths
     assert params == expParams
+
+    compareParams(rx, params)
 
 def test3():
     "Mimics Configure('Continuum with Rcvr8_10')"
@@ -660,6 +664,53 @@ def test3():
 
     assert pathNames == expPaths
     assert params == expParams
+
+    compareParams(rx, params)
+
+def compareParams(rx, params):
+
+    # get the values logged by config tool
+    configParams = getConfigLogValues(rx)
+
+    # convert our tuples to dictionary
+    ourParams = {}
+    for mgrParam, value in params:
+        idx = mgrParam.find(',')
+        mgr = mgrParam[:idx]
+        paramName = mgrParam[idx+1:]
+        if mgr not in ourParams:
+            ourParams[mgr] = {}
+        ourParams[mgr][paramName] = value
+        
+    # make sure whatever we are setting so far, has been set
+    # the same way in the config logs    
+    for mgr, paramValues in ourParams.items():
+        for param, value in paramValues.items():
+            # print (mgr, param, value)
+            # print (configParams[mgr][param])
+            if param not in configParams[mgr]:
+                print("We set this but config tool didn't", mgr, param)
+                continue
+            assert str(configParams[mgr][param]) == str(value)
+
+def getConfigLogValues(rx):
+    "Read text made from config log pickle file, return dct of values"
+
+    fn = "configLogs/%sConfigLog.txt" % rx
+    with open(fn, 'r') as f:
+        ls = f.readlines()
+
+    # convert text to dct of {mgr: {param: value}}
+    values = {}
+    for l in ls:
+        mgr, param, value = l.split(' ')
+        value = value[:-1] # remove \n
+        if mgr not in values:
+            values[mgr] = {}
+        values[mgr][param] = value
+        
+    return values
+                
 
 def main():
     test1()
