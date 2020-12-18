@@ -39,7 +39,10 @@ class Bandpasses:
         self.freqCols = 80
         self.freqPerCol = (self.hi - self.lo) / self.freqCols
 
-        
+    
+    def getNumBandpasses(self):
+        return len(self.bandpasses)
+
     def getRange(self):
     
         self.lo = min([bp.lo for bp in self.bandpasses])
@@ -158,9 +161,13 @@ class Bandpass:
 
     def mixUp(self, mixFreq):
         "Mix bandpass with given frequency, upper sideband"
-        self.lo =  self.lo - mixFreq
-        self.hi =  self.hi - mixFreq
-        self.target =  self.target - mixFreq
+        # TBF: what the hell?
+        # self.lo =  self.lo - mixFreq
+        # self.hi =  self.hi - mixFreq
+        # self.target =  self.target - mixFreq
+        self.lo = mixFreq - self.lo
+        self.hi = mixFreq - self.hi
+        self.target = mixFreq - self.target        
         self.order()
 
     def order(self):
