@@ -39,12 +39,25 @@ def traceFreqs(paths):
 
         # gather all the bandpasses for this path so that
         # we can have the scale right when drawing each bandpass
-        bps = []
-        for node in path:
-            if node.ifInfo is not None and node.ifInfo.bandpasses is not None:
-                bps.extend(node.ifInfo.bandpasses.bandpasses)
-        bps = Bandpasses(bps)
+        # bps = []
+        # for node in path:
+        #     if node.ifInfo is not None and node.ifInfo.bandpasses is not None:
+        #         bps.extend(node.ifInfo.bandpasses.bandpasses)
+        # bps = Bandpasses(bps)
+        bps = aggregatePathBandpasses(path)
         bps.show()
+
+def aggregatePathBandpasses(path):
+    "Put together bandpasses for each node in given path to one collection"
+
+    # one motivation is the fact that Bandpasses.show() needs them to all be on 
+    # the same scale to visualize correctly
+    bps = []
+    for node in path:
+        if node.ifInfo is not None and node.ifInfo.bandpasses is not None:
+            bps.extend(node.ifInfo.bandpasses.bandpasses)
+    bps = Bandpasses(bps)
+    return bps
 
 def getFrontendFeeds(g, feed):
     "We call the port of a frontend (receiver) node a feed"
@@ -273,6 +286,8 @@ def setRxFilters(receiver, tuning_freq, bw_total):
     # lo, hi = RCVR_FREQS[receiver]
     # bw_total = hi - lo
 
+    filter_setting = freqLow = freqHigh = None
+
     if receiver in FILTERS:
         param_names, filters, rcvr_type = FILTERS[receiver]
         bw_low = tuning_freq - (0.5 * bw_total)
@@ -282,45 +297,50 @@ def setRxFilters(receiver, tuning_freq, bw_total):
         #     bw_high = self.if_freq_high
         filter_setting = filter_bandwidth = None
         # Choose the first one that encompasses our bw_low and bw_high!
-        for freq in filters:
-            if bw_low >= freq[0] and bw_high <= freq[1]:
-                filter_setting = freq[2]
-                filter_bandwidth = freq[1] - freq[0]
+        for freqLow, freqHigh, freqSetting in filters:
+            if bw_low >= freqLow and bw_high <= freqHigh:
+                filter_setting = freqSetting
+                filter_bandwidth = freqHigh - freqLow
                 found = 1
                 break
 
-    return filter_setting, freq[0], freq[1]  
+    return filter_setting, freqLow, freqHigh  
 
 def setIFFilters(total_bw_low, total_bw_high, ifpath):
     "TBF: explain this"
+    print("setIFFilters", total_bw_low, total_bw_high)
 
     params = []
     for path in ifpath:
         filter_value = "pass_all"
         param = None
 
-        for filter_value, fLow, fHigh in IFfilters:
+        for fv, fLow, fHigh in IFfilters:
             # fLow = f[1]
             # fHigh = f[2]
             # if f[1] <= total_bw_low and f[2] >= total_bw_high:
                 # filter_value = f[0]
             if fLow <= total_bw_low and fHigh >= total_bw_high:
+                filter_value = fv
+                print("print found good filter at", filter_value, fLow, fHigh)
                 break
+
         opticalDriver = getFirstLikeDeviceNode(path, "OpticalDriver")        
         # if "opticalDriver" in path:
         if opticalDriver is not None:
             filterNum = opticalDriver.deviceId # path["opticalDriver"]
             param = "IFRack,filter_select,{}".format(filterNum)
-            opticalDriver.ifInfo = IFInfo()
-            opticalDriver.ifInfo.filters = []
-            opticalDriver.ifInfo.filters.append((param, filter_value))
-            bp = getBandpassUpToNode(path, opticalDriver)
-            bpFilter = copy(bp)
-            bpFilter.filter(fLow, fHigh)
-            bpFilter.changes = "%s, (%f, %f)" % (param, fLow, fHigh)
-            opticalDriver.setBandpasses([bpFilter])
+            params.append((param, filter_value))
+            if filter_value != "pass_all":
+                opticalDriver.ifInfo = IFInfo()
+                opticalDriver.ifInfo.filters = []
+                opticalDriver.ifInfo.filters.append((param, filter_value))
+                bp = getBandpassUpToNode(path, opticalDriver)
+                bpFilter = copy(bp)
+                bpFilter.filter(fLow, fHigh)
+                bpFilter.changes = "%s, (%f, %f)" % (param, fLow, fHigh)
+                opticalDriver.setBandpasses([bpFilter])
                 # self.seq.add_param(self.mng, fs, self.filter_value)
-        params.append((param, filter_value))
     return params 
 
 def getFilterBandpasses(bp1, rxNode):
@@ -333,11 +353,19 @@ def getFilterBandpasses(bp1, rxNode):
         bps.append(bp)
     return bps
 
-def getLO1Bandpass(bp1, rxNode, lowerSideband=True):    
+def getLO1Bandpass(bp1, rxNode, lowerSideband=None):
+
+    print("getLO1Bandpass", bp1, rxNode, lowerSideband)
+    if lowerSideband is None:
+        s = RCVR_SIDEBAND[rxNode.device]
+        lowerSideband = s == -1
+        print("RCVR_SIDEBAND", s, lowerSideband)
+
     bpLO1 = copy(bp1)
     loMixFreq = rxNode.ifInfo.lo['freq']
     bpLO1.mix(loMixFreq, lowerSideband=lowerSideband)
     sideband = "lower" if lowerSideband else "upper"
+    print("sideband", sideband)
     bpLO1.changes = "LO %s sideband at %f" % (sideband, loMixFreq)
     return bpLO1
 
@@ -380,10 +408,15 @@ def calcFreqs(config, paths):
     ifNom = RCVR_IF_NOMINAL[receiver]
     multiplier1 = RCVR_SIDEBAND[receiver]
     freqLocal = compute_Flocal(config)
-    # print("IF1 computed from: ", multiplier1, freqLocal, skyFreq, ifNom)
+    print("IF1 computed from: ", multiplier1, freqLocal, skyFreq, ifNom)
     # Compute the IF frequencies!  What equation is this????
     if1 = (multiplier1 * (freqLocal - skyFreq) + ifNom)
-    if0 = if1
+    if receiver == "Rcvr26_40": # W-band too!
+        # mmconverter!
+        if_offset = 44000.
+        if0 = if_offset - freqLocal
+    else:    
+        if0 = if1
     # for path in paths:
     #     path[0].ifFreq = config['restfreq']
     #     path[0].bw = bwTotal
@@ -405,14 +438,18 @@ def calcFreqs(config, paths):
 
     # parameters
     # print("Receiver filter: ", filterSetting, filterLo, filterHi)
-    for x in ['left', 'right']:
-        paramName = "%s,%sIfFilterSwitch" % (receiver, x)
-        params.append((paramName, filterSetting))
+    if filterSetting is not None:
+        for x in ['left', 'right']:
+            paramName = "%s,%sIfFilterSwitch" % (receiver, x)
+            params.append((paramName, filterSetting))
 
     # start calculating band pass info    
     for path in paths:
         path[0].ifInfo = IFInfo()
-        path[0].ifInfo.filters = [(filterSetting, filterLo, filterHi)]
+        if filterSetting is not None:
+            path[0].ifInfo.filters = [(filterSetting, filterLo, filterHi)]
+        else:    
+            path[0].ifInfo.filters = []
 
     # now we can see how the band pass changes by mixing in the LO1
     # LO1 params set:
@@ -542,6 +579,8 @@ def test1():
     assert pathNames == expPaths
     assert params == expParams
 
+    checkBandpasses(paths, 4, 1400., 3000.)
+
     compareParams(rx, params)
 
 def test2():
@@ -603,6 +642,8 @@ def test2():
     assert pathNames == expPaths
     assert params == expParams
 
+    checkBandpasses(paths, 4, 2000., 6000.)
+
     compareParams(rx, params)
 
 def test3():
@@ -644,6 +685,9 @@ def test3():
         print (path)
         pathNames.append([p.name for p in path])
 
+    # TBF: unit test paths go to A2 and A4, presumably because the pickle
+    # file seems to have paths in random order, not sorted by backend port.
+    # Significant?
     expPaths = [
         ['Rcvr8_10:L', 'R8_10XL:0', 'R8_10XL:1', 'IFRouter:J13', 'SWITCH1', 'IFXS9:cross', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'],
         ['Rcvr8_10:R', 'R8_10YR:0', 'R8_10YR:1', 'IFRouter:J29', 'SWITCH3', 'IFXS10:cross', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3']
@@ -665,7 +709,243 @@ def test3():
     assert pathNames == expPaths
     assert params == expParams
 
+    checkBandpasses(paths, 4, 9000., 3000.)
+
+    # TBF: IFRack,filter_select,# is determined from OpicalDriver#;
+    # since unit test paths are different, these params also differ
     compareParams(rx, params)
+
+def test4():
+    "Mimics Configure('Continuum with Rcvr4_6')"
+
+
+    # configure from DB
+    config = {
+        'receiver'  : 'Rcvr4_6', # changes from other 'Continuum with *' scripts
+        'beam' : 'B1',
+        'obstype'   : 'Continuum',
+        'backend'   : 'DCR',
+        'nwin'      : 1,
+        'restfreq'  : 5000, # changes
+        'deltafreq' : 0,
+        'bandwidth' : 80,
+        'swmode'    : "tp",
+        'swtype'    : "none",
+        'swper'     : 0.1,
+        # 'swfreq'    : 0,0,
+        'tint'      : 0.1,
+        'vlow'      : 0.0,
+        'vhigh'     : 0.0,
+        'vframe'    : "topo",
+        'vdef'      : "Radio",
+        'noisecal'  :  "lo",
+        'pol'       : "Linear", # changes
+    }
+        
+
+    rx = config["receiver"]
+    fn = "zdb.201118.pkl.%s.txt" % rx  
+
+    paths, params = configureDCR(config, pathsFile=fn, debug=False)
+
+    # convert list of IFPathNode lists to list of list of strings
+    # pathNames = []
+    # for path in paths:
+    #     print (path)
+    #     pathNames.append([p.name for p in path])
+
+    # expPaths = [
+    #     ['Rcvr8_10:L', 'R8_10XL:0', 'R8_10XL:1', 'IFRouter:J13', 'SWITCH1', 'IFXS9:cross', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'],
+    #     ['Rcvr8_10:R', 'R8_10YR:0', 'R8_10YR:1', 'IFRouter:J29', 'SWITCH3', 'IFXS10:cross', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3']
+    # ]
+
+    #  # test freq. related params set
+    # expParams = [
+    #     ('Rcvr8_10,leftIfFilterSwitch', 'narrowband'),
+    #     ('Rcvr8_10,rightIfFilterSwitch', 'narrowband'),
+    #     ('LO1,restFrequency', 9000),
+    #     ('LO1,velocityDefinition', 'Radio'),
+    #     ('LO1,sourceVelocity,position', 0.0),
+    #     ('LO1,restFrame', 'Local'),
+    #     ('LO1,ifCenterFreq', 3000.0),
+    #     ('IFRack,filter_select,1', 'pass_2960_3040'),
+    #     ('IFRack,filter_select,3', 'pass_2960_3040')
+    # ]
+
+    # assert pathNames == expPaths
+    # assert params == expParams
+    checkBandpasses(paths, 3, 5000., 3000.)
+
+    compareParams(rx, params)
+
+def test5():
+    "Mimics Configure('Continuum with Rcvr12_18')"
+
+
+    # configure from DB
+    config = {
+        'receiver'  : 'Rcvr12_18', # changes from other 'Continuum with *' scripts
+        'beam' : 'B12', # changed form 'B1'!
+        'obstype'   : 'Continuum',
+        'backend'   : 'DCR',
+        'nwin'      : 1,
+        'restfreq'  : 14000, # changes
+        'deltafreq' : 0,
+        'bandwidth' : 320, # changed from 80!
+        'swmode'    : "tp",
+        'swtype'    : "none",
+        'swper'     : 0.1,
+        # 'swfreq'    : 0,0,
+        'tint'      : 0.1,
+        'vlow'      : 0.0,
+        'vhigh'     : 0.0,
+        'vframe'    : "topo",
+        'vdef'      : "Radio",
+        'noisecal'  :  "lo",
+        'pol'       : "Circular", # changes
+    }
+        
+
+    rx = config["receiver"]
+    fn = "zdb.201118.pkl.%s.txt" % rx  
+
+    paths, params = configureDCR(config, pathsFile=fn, debug=False)
+
+    # TBF: once again, pkl file not ordered, so it chooses A2 instead of A1
+    
+    checkBandpasses(paths, 3, 14000., 3000.)
+
+    # TBF: it seems that we are setting 4 IFRack filters in production,
+    # but only two here and in our unit tests?
+    compareParams(rx, params)
+
+def test6():
+    "Mimics Configure('Continuum with Rcvr26_40')"
+
+
+    # configure from DB
+    config = {
+        'receiver'  : 'Rcvr26_40', # changes from other 'Continuum with *' scripts
+        'beam' : 'B1', 
+        'obstype'   : 'Continuum',
+        'backend'   : 'DCR',
+        'nwin'      : 1,
+        'restfreq'  : 32000, # changes
+        'deltafreq' : 0,
+        'bandwidth' : 320, # changed from 80!
+        'swmode'    : "sp", # changed!
+        'swtype'    : "bsw", # changed!
+        'swper'     : 0.1,
+        # 'swfreq'    : 0,0,
+        'tint'      : 0.1,
+        'vlow'      : 0.0,
+        'vhigh'     : 0.0,
+        'vframe'    : "topo",
+        'vdef'      : "Radio",
+        'noisecal'  :  "lo",
+        'pol'       : "Circular", # changes
+    }
+        
+
+    rx = config["receiver"]
+    fn = "zdb.201118.pkl.%s.txt" % rx  
+
+    paths, params = configureDCR(config, pathsFile=fn, debug=False)
+
+    # convert list of IFPathNode lists to list of list of strings
+    pathNames = []
+    for path in paths:
+        print (path)
+        pathNames.append([p.name for p in path])
+
+    # from unit test
+    expPaths = [
+        ['Rcvr26_40:L2', 'MMConverter2:J2', 'MMConverter2:J6', 'IFRouter:J22', 'SWITCH3', 'IFXS10:thru', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3'],
+        ['Rcvr26_40:R1', 'MMConverter1:J2', 'MMConverter1:J6', 'IFRouter:J6', 'SWITCH1', 'IFXS9:thru', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'] 
+    ]
+    
+    assert pathNames == expPaths
+
+    checkBandpasses(paths, 3, 32000., 6000.)
+
+    # compare to production mgr param values
+    compareParams(rx, params)
+
+    # TBF: have we visualized IF path of system when mm converter is used?
+
+def test7():
+    "Mimics Configure('Continuum with Rcvr342')"
+
+
+    # configure from DB
+    config = {
+        'receiver'  : 'Rcvr_342', # changes from other 'Continuum with *' scripts
+        'beam' : 'B1', 
+        'obstype'   : 'Continuum',
+        'backend'   : 'DCR',
+        'nwin'      : 1,
+        'restfreq'  : 340, # changes
+        'deltafreq' : 0,
+        'bandwidth' : 20, # changed from 80!
+        'swmode'    : "tp", 
+        'swtype'    : "none", 
+        'swper'     : 0.1,
+        # 'swfreq'    : 0,0,
+        'tint'      : 0.1,
+        'vlow'      : 0.0,
+        'vhigh'     : 0.0,
+        'vframe'    : "topo",
+        'vdef'      : "Radio",
+        'noisecal'  :  "lo",
+        'pol'       : "Linear", # changes
+    }
+        
+
+    rx = config["receiver"]
+    fn = "zdb.201118.pkl.%s.txt" % 'RcvrPF_1' 
+    # from unit test, but no difference 
+    # fn = "test_pkl.RcvrPF_1.txt"
+
+    paths, params = configureDCR(config, pathsFile=fn, debug=True)
+
+    # convert list of IFPathNode lists to list of list of strings
+    pathNames = []
+    for path in paths:
+        print (path)
+        pathNames.append([p.name for p in path])
+
+    # from unit test
+    expPaths = [
+        ['RcvrPF_1:XLC_IF', 'PF_IF_Conditioner:J3', 'PF_IF_Conditioner:XLC', 'PF_XLC:0', 'PF_XLC:1', 'IFRouter:J33', 'SWITCH5', 'IFXS11:thru', 'IFRouter:J69', 'OpticalDriver5:J1', 'OpticalDriver5:J4', 'DCR:A_5'], 
+        ['RcvrPF_1:YRD_IF', 'PF_IF_Conditioner:J4', 'PF_IF_Conditioner:YRD', 'PF_YRD:0', 'PF_YRD:1', 'IFRouter:J49', 'SWITCH7', 'IFXS12:thru', 'IFRouter:J71', 'OpticalDriver7:J1', 'OpticalDriver7:J4', 'DCR:A_7']
+    ]
+    
+    # we aren't getting the same paths.  It looks like this happens because the
+    # paths coming out of the pickle file aren't ordered as expected.  For the first feed:
+    # RcvrPF_1:XLC_IF DCR:A_5
+    # RcvrPF_1:YRD_IF DCR:A_7
+    # RcvrPF_1:XLC_IF DCR:A_1
+    # But since we order our path searches by the backend node, we choose A_1 first, not A_5.
+    # TBF: should we worry about this?
+    #assert pathNames == expPaths
+
+    checkBandpasses(paths, 2, 340., 1080.)
+
+    # compare to production mgr param values
+    compareParams(rx, params)
+    
+def checkBandpasses(paths, numExpBandpasses, ifFirst, ifLast):
+
+    for path in paths:
+        bps = aggregatePathBandpasses(path)
+        assert numExpBandpasses == bps.getNumBandpasses()
+        assert bps.bandpasses[0].target == ifFirst
+        assert bps.bandpasses[-1].target == ifLast
+        # sanity checks:
+        for bp in bps.bandpasses:
+            assert bp.lo >= 0.
+            assert bp.hi >= 0.
+            assert bp.hi >= bp.lo
 
 def compareParams(rx, params):
 
@@ -674,7 +954,9 @@ def compareParams(rx, params):
 
     # convert our tuples to dictionary
     ourParams = {}
+    print("our params:")
     for mgrParam, value in params:
+        print(mgrParam, value)
         idx = mgrParam.find(',')
         mgr = mgrParam[:idx]
         paramName = mgrParam[idx+1:]
@@ -691,7 +973,16 @@ def compareParams(rx, params):
             if param not in configParams[mgr]:
                 print("We set this but config tool didn't", mgr, param)
                 continue
+            if str(configParams[mgr][param]) != str(value):
+                print("We set: ", mgr, param, value)
+                print("Config tool set:", mgr, param, configParams[mgr][param])
             assert str(configParams[mgr][param]) == str(value)
+
+    if "IFRack" in configParams:
+        print ("IFRack filter values")
+        for k, v in configParams["IFRack"].items():
+            if "filter" in k:
+                print (k, v)
 
 def getConfigLogValues(rx):
     "Read text made from config log pickle file, return dct of values"
@@ -716,6 +1007,10 @@ def main():
     test1()
     test2()
     test3()
+    test4()
+    test5()
+    test6()
+    test7()
 
 if __name__ == '__main__':
     main()
