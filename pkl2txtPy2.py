@@ -50,15 +50,31 @@ def pkl2txt(fn, rx):
 
     f2.close()
 
+def unitTestPkl2txt():
+    rxs = ["RcvrPF_1"]
+    fn = "test_pkl"
+    for rx in rxs:
+        pkl2txt(fn, rx)
+
 def rcvrs2txt():
-    rxs = ["RcvrPF_1", "Rcvr1_2", "Rcvr2_3", "Rcvr4_6", "Rcvr8_10"]
+    rxs = [
+        "RcvrPF_1", 
+        "Rcvr1_2",
+        "Rcvr2_3",
+        "Rcvr4_6",
+        "Rcvr8_10",
+        "Rcvr12_18",
+        "RcvrArray18_26",
+        "Rcvr26_40",
+        "RcvrArray75_115"
+    ]
     fn = "zdb.201118.pkl"
     for rx in rxs:
         pkl2txt(fn, rx)
 
 def configLogs2txt():
-    rxs = ["Rcvr342", "Rcvr1_2", "Rcvr2_3", "Rcvr4_6", "Rcvr8_10", "Rcvr12_18"]
-
+    # rxs = ["Rcvr342", "Rcvr1_2", "Rcvr2_3", "Rcvr4_6", "Rcvr8_10", "Rcvr12_18"]
+    rxs = ["RcvrArray18_26", "Rcvr26_40", "RcvrArray75_115"]
     for rx in rxs:
         fn = "configLogs/%sConfigLog" % rx
         pkl2txtConfigLog(fn)
@@ -66,7 +82,9 @@ def configLogs2txt():
 def main():
     #rx = "RcvrPF_1"
     #rx = "Rcvr1_2"
-    configLogs2txt()
-
+    # configLogs2txt()
+    # unitTestPkl2txt()
+    rcvrs2txt()
+    
 if __name__ == "__main__":
     main()
