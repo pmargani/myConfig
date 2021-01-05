@@ -36,7 +36,7 @@ class MinMaxFreqs:
         return (self.minf + self.maxf) / 2.0
             
     def computeBW(self, bw=None):
-        bw = sef.bw if bw is None else bw
+        bw = self.bw if bw is None else bw
         return (self.maxf - self.minf + bw)
 
     def __str__(self):
