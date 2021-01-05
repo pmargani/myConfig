@@ -312,7 +312,7 @@ def setRxFilters(receiver, tuning_freq, bw_total):
     return filter_setting, freqLow, freqHigh  
 
 def setIFFilters(total_bw_low, total_bw_high, ifpath):
-    "TBF: explain this"
+    "Returns IFRack parameters and updates paths bandpass info"
     print("setIFFilters", total_bw_low, total_bw_high)
 
     params = []
@@ -333,13 +333,16 @@ def setIFFilters(total_bw_low, total_bw_high, ifpath):
         opticalDriver = getFirstLikeDeviceNode(path, "OpticalDriver")        
         # if "opticalDriver" in path:
         if opticalDriver is not None:
+            # update the IFRack parameters
             filterNum = opticalDriver.deviceId # path["opticalDriver"]
             param = "IFRack,filter_select,{}".format(filterNum)
             params.append((param, filter_value))
             if filter_value != "pass_all":
+                # set this nodes ifInfo filter info
                 opticalDriver.ifInfo = IFInfo()
                 opticalDriver.ifInfo.filters = []
                 opticalDriver.ifInfo.filters.append((param, filter_value))
+                # then use filter range to update the bandpass at this node
                 bp = getBandpassUpToNode(path, opticalDriver)
                 bpFilter = copy(bp)
                 bpFilter.filter(fLow, fHigh)
@@ -349,6 +352,7 @@ def setIFFilters(total_bw_low, total_bw_high, ifpath):
     return params 
 
 def getFilterBandpasses(bp1, rxNode):
+    "Return bandpasses representing filters in receiver"
     bps = []
     bp = copy(bp1)
     for fName, fLow, fHigh in rxNode.ifInfo.filters:
@@ -359,7 +363,7 @@ def getFilterBandpasses(bp1, rxNode):
     return bps
 
 def getLO1Bandpass(bp1, rxNode, lowerSideband=None):
-
+    "Return bandpass representing receivers LO1 mixing"
     print("getLO1Bandpass", bp1, rxNode, lowerSideband)
     if lowerSideband is None:
         s = RCVR_SIDEBAND[rxNode.device]
@@ -526,6 +530,11 @@ def calcFreqs(config, paths):
     return params
 
 def configureDCR(config, pathsFile=None, debug=False):
+    """
+    The Main Event.
+    Here we are given a standard config tool dictionary.  We return
+    the resultant paths (lists of IFPathNodes) and the manager params.
+    """
     paths = getDCRPaths(config, pathsFile=pathsFile, debug=debug)
     params = calcFreqs(config, paths)
     return paths, params
@@ -574,10 +583,10 @@ def testKFPA():
 
     # from unit test
     expPaths = [
-        ['RcvrArray18_26:R4', 'IFRouter:J24', 'SWITCH3', 'IFXS10:thru', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J2', 'OpticalReceiver3:J1', 'OpticalReceiver3:D', 'ConverterModule8:J1', 'ConverterModule8:J3', 'SamplerFilter8:J1', 'SamplerFilter8:J6', 'DCR:A_16', [{'tint': 0.1, 'beam': '4', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]],
-        ['RcvrArray18_26:L4', 'IFRouter:J7', 'SWITCH1', 'IFXS9:thru', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J2', 'OpticalReceiver1:J1', 'OpticalReceiver1:D', 'ConverterModule4:J1', 'ConverterModule4:J3', 'SamplerFilter4:J1', 'SamplerFilter4:J6', 'DCR:A_12', [{'tint': 0.1, 'beam': '4', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]],
-        ['RcvrArray18_26:L6', 'IFRouter:J15', 'SWITCH2', 'IFXS9:thru', 'IFRouter:J66', 'OpticalDriver2:J1', 'OpticalDriver2:J2', 'OpticalReceiver2:J1', 'OpticalReceiver2:A', 'ConverterModule1:J2', 'ConverterModule1:J3', 'SamplerFilter1:J1', 'SamplerFilter1:J6', 'DCR:A_9', [{'tint': 0.1, 'beam': '6', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]],
-        ['RcvrArray18_26:R6', 'IFRouter:J31', 'SWITCH4', 'IFXS10:thru', 'IFRouter:J68', 'OpticalDriver4:J1', 'OpticalDriver4:J2', 'OpticalReceiver4:J1', 'OpticalReceiver4:A', 'ConverterModule5:J2', 'ConverterModule5:J3', 'SamplerFilter5:J1', 'SamplerFilter5:J6', 'DCR:A_13', [{'tint': 0.1, 'beam': '6', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]]
+        ['RcvrArray18_26:R4', 'IFRouter:J24', 'SWITCH3', 'IFXS10:thru', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J2', 'OpticalReceiver3:J1', 'OpticalReceiver3:D', 'ConverterModule8:J1', 'ConverterModule8:J3', 'SamplerFilter8:J1', 'SamplerFilter8:J6', 'DCR:A_16'], #, [{'tint': 0.1, 'beam': '4', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]],
+        ['RcvrArray18_26:L4', 'IFRouter:J7', 'SWITCH1', 'IFXS9:thru', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J2', 'OpticalReceiver1:J1', 'OpticalReceiver1:D', 'ConverterModule4:J1', 'ConverterModule4:J3', 'SamplerFilter4:J1', 'SamplerFilter4:J6', 'DCR:A_12'], #, [{'tint': 0.1, 'beam': '4', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]],
+        ['RcvrArray18_26:L6', 'IFRouter:J15', 'SWITCH2', 'IFXS9:thru', 'IFRouter:J66', 'OpticalDriver2:J1', 'OpticalDriver2:J2', 'OpticalReceiver2:J1', 'OpticalReceiver2:A', 'ConverterModule1:J2', 'ConverterModule1:J3', 'SamplerFilter1:J1', 'SamplerFilter1:J6', 'DCR:A_9'], #, [{'tint': 0.1, 'beam': '6', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]],
+        ['RcvrArray18_26:R6', 'IFRouter:J31', 'SWITCH4', 'IFXS10:thru', 'IFRouter:J68', 'OpticalDriver4:J1', 'OpticalDriver4:J2', 'OpticalReceiver4:J1', 'OpticalReceiver4:A', 'ConverterModule5:J2', 'ConverterModule5:J3', 'SamplerFilter5:J1', 'SamplerFilter5:J6', 'DCR:A_13'] #, [{'tint': 0.1, 'beam': '6', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]]
     ]
 
     # from productions etc/log/config/config_status:
@@ -586,7 +595,7 @@ def testKFPA():
     # RcvrArray18_26:L6->IFRouter:J15->SWITCH2->IFXS9:thru->IFRouter:J66->OpticalDriver2:J1->OpticalDriver2:J2->OpticalReceiver2:J1->OpticalReceiver2:A->ConverterModule1:J2->ConverterModule1:J3->SamplerFilter1:J1->SamplerFilter1:J6->DCR:A_9
     # RcvrArray18_26:R6->IFRouter:J31->SWITCH4->IFXS10:thru->IFRouter:J68->OpticalDriver4:J1->OpticalDriver4:J2->OpticalReceiver4:J1->OpticalReceiver4:A->ConverterModule5:J2->ConverterModule5:J3->SamplerFilter5:J1->SamplerFilter5:J6->DCR:A_13     
         
-    #assert pathNames == expPaths
+    assert pathNames == expPaths
 
     # checkBandpasses(paths, 2, 340., 1080.)
 
