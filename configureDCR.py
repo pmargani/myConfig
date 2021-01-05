@@ -163,6 +163,11 @@ def getDCRPaths(config, pathsFile=None, debug=False):
     # prune the paths of non-DCR backends
     paths = [p for p in paths if 'DCR' in p[-1].name]
 
+    if debug:
+        print ("Path summary:")
+        for path in paths:
+            print(path[0], path[-1])
+
     feed1path = getArbitraryFirstPath(paths, rx, backend, beam, debug=debug)
 
     feeds = BEAM_TO_FEED_DES[rx][beam]
@@ -812,7 +817,7 @@ def test5():
     paths, params = configureDCR(config, pathsFile=fn, debug=False)
 
     # TBF: once again, pkl file not ordered, so it chooses A2 instead of A1
-    
+
     checkBandpasses(paths, 3, 14000., 3000.)
 
     # TBF: it seems that we are setting 4 IFRack filters in production,
@@ -920,6 +925,10 @@ def test7():
         ['RcvrPF_1:YRD_IF', 'PF_IF_Conditioner:J4', 'PF_IF_Conditioner:YRD', 'PF_YRD:0', 'PF_YRD:1', 'IFRouter:J49', 'SWITCH7', 'IFXS12:thru', 'IFRouter:J71', 'OpticalDriver7:J1', 'OpticalDriver7:J4', 'DCR:A_7']
     ]
     
+    # from production, slightly different!:
+    # RcvrPF_1:XLC_IF->PF_IF_Conditioner:J3->PF_IF_Conditioner:XLC->PF_XLC:0->PF_XLC:1->IFRouter:J33->SWITCH5->IFXS11:thru->IFRouter:J69->OpticalDriver5:J1->OpticalDriver5:J4->DCR:A_5
+    # RcvrPF_1:YRD_IF->PF_IF_Conditioner:J4->PF_IF_Conditioner:YRD->PF_YRD:0->PF_YRD:1->IFRouter:J23->SWITCH3->IFXS10:thru->IFRouter:J67->OpticalDriver3:J1->OpticalDriver3:J4->DCR:A_3
+
     # we aren't getting the same paths.  It looks like this happens because the
     # paths coming out of the pickle file aren't ordered as expected.  For the first feed:
     # RcvrPF_1:XLC_IF DCR:A_5
@@ -934,6 +943,78 @@ def test7():
     # compare to production mgr param values
     compareParams(rx, params)
     
+def test8():
+    "Mimics Configure('Continuum with RcvrArray18_26')"
+
+
+    # configure from DB
+    config = {
+        'receiver'  : 'RcvrArray18_26', # changes from other 'Continuum with *' scripts
+        'beam' : '4,6', 
+        'obstype'   : 'Continuum',
+        'backend'   : 'DCR', # 'DCR_AF' used by config tool to enforce Analog Filter rack routing
+        'nwin'      : 1,
+        'restfreq'  : 2500, # changes
+        'deltafreq' : 0,
+        'bandwidth' : 800, # changed from 80!
+        'swmode'    : "tp", 
+        'swtype'    : "none", 
+        'swper'     : 0.1,
+        # 'swfreq'    : 0,0,
+        'tint'      : 0.1,
+        'vlow'      : 0.0,
+        'vhigh'     : 0.0,
+        'vframe'    : "topo",
+        'vdef'      : "Radio",
+        'noisecal'  :  "lo",
+        'pol'       : "Circular", # changes
+    }
+        
+
+    rx = config["receiver"]
+    fn = "zdb.201118.pkl.%s.txt" % rx
+    # from unit test, but no difference 
+    # fn = "test_pkl.RcvrPF_1.txt"
+
+    paths, params = configureDCR(config, pathsFile=fn, debug=True)
+
+    # convert list of IFPathNode lists to list of list of strings
+    pathNames = []
+    for path in paths:
+        print (path)
+        pathNames.append([p.name for p in path])
+
+    # from unit test
+    expPaths = [
+        ['RcvrArray18_26:R4', 'IFRouter:J24', 'SWITCH3', 'IFXS10:thru', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J2', 'OpticalReceiver3:J1', 'OpticalReceiver3:D', 'ConverterModule8:J1', 'ConverterModule8:J3', 'SamplerFilter8:J1', 'SamplerFilter8:J6', 'DCR:A_16', [{'tint': 0.1, 'beam': '4', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]],
+        ['RcvrArray18_26:L4', 'IFRouter:J7', 'SWITCH1', 'IFXS9:thru', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J2', 'OpticalReceiver1:J1', 'OpticalReceiver1:D', 'ConverterModule4:J1', 'ConverterModule4:J3', 'SamplerFilter4:J1', 'SamplerFilter4:J6', 'DCR:A_12', [{'tint': 0.1, 'beam': '4', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]],
+        ['RcvrArray18_26:L6', 'IFRouter:J15', 'SWITCH2', 'IFXS9:thru', 'IFRouter:J66', 'OpticalDriver2:J1', 'OpticalDriver2:J2', 'OpticalReceiver2:J1', 'OpticalReceiver2:A', 'ConverterModule1:J2', 'ConverterModule1:J3', 'SamplerFilter1:J1', 'SamplerFilter1:J6', 'DCR:A_9', [{'tint': 0.1, 'beam': '6', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]],
+        ['RcvrArray18_26:R6', 'IFRouter:J31', 'SWITCH4', 'IFXS10:thru', 'IFRouter:J68', 'OpticalDriver4:J1', 'OpticalDriver4:J2', 'OpticalReceiver4:J1', 'OpticalReceiver4:A', 'ConverterModule5:J2', 'ConverterModule5:J3', 'SamplerFilter5:J1', 'SamplerFilter5:J6', 'DCR:A_13', [{'tint': 0.1, 'beam': '6', 'nchan': 'low', 'deltafreq': 0, 'bandwidth': 800, 'vpol': None, 'subband': None, 'restfreq': 2500}]]
+    ]
+
+    # from productions etc/log/config/config_status:
+    # RcvrArray18_26:R4->IFRouter:J24->SWITCH3->IFXS10:thru->IFRouter:J67->OpticalDriver3:J1->OpticalDriver3:J2->OpticalReceiver3:J1->OpticalReceiver3:D->ConverterModule8:J1->ConverterModule8:J3->SamplerFilter8:J1->SamplerFilter8:J6->DCR:A_16
+    # RcvrArray18_26:L4->IFRouter:J7->SWITCH1->IFXS9:thru->IFRouter:J65->OpticalDriver1:J1->OpticalDriver1:J2->OpticalReceiver1:J1->OpticalReceiver1:D->ConverterModule4:J1->ConverterModule4:J3->SamplerFilter4:J1->SamplerFilter4:J6->DCR:A_12
+    # RcvrArray18_26:L6->IFRouter:J15->SWITCH2->IFXS9:thru->IFRouter:J66->OpticalDriver2:J1->OpticalDriver2:J2->OpticalReceiver2:J1->OpticalReceiver2:A->ConverterModule1:J2->ConverterModule1:J3->SamplerFilter1:J1->SamplerFilter1:J6->DCR:A_9
+    # RcvrArray18_26:R6->IFRouter:J31->SWITCH4->IFXS10:thru->IFRouter:J68->OpticalDriver4:J1->OpticalDriver4:J2->OpticalReceiver4:J1->OpticalReceiver4:A->ConverterModule5:J2->ConverterModule5:J3->SamplerFilter5:J1->SamplerFilter5:J6->DCR:A_13     
+        
+    #assert pathNames == expPaths
+
+    # checkBandpasses(paths, 2, 340., 1080.)
+
+    # compare to production mgr param values
+    # compareParams(rx, params)
+
+def test9():
+
+    # Argus
+
+    # from production config_status:
+    # RcvrArray75_115:J10->IFRouter:J12->SWITCH2->IFXS9:thru->IFRouter:J66->OpticalDriver2:J1->OpticalDriver2:J4->DCR:A_2
+    # RcvrArray75_115:J11->IFRouter:J20->SWITCH3->IFXS10:thru->IFRouter:J67->OpticalDriver3:J1->OpticalDriver3:J4->DCR:A_3
+
+    pass
+
 def checkBandpasses(paths, numExpBandpasses, ifFirst, ifLast):
 
     for path in paths:
@@ -1011,6 +1092,7 @@ def main():
     test5()
     test6()
     test7()
+    test8()
 
 if __name__ == '__main__':
     main()
