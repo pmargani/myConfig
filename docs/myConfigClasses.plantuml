@@ -1,0 +1,62 @@
+@startuml
+
+title Classes - Class Diagram
+
+
+class IFPathNode {
+  + name
+  + device
+  + deviceId
+  + port
+  + type
+  + ifInfo
+  
+}
+
+class IFInfo {
+  + bandpasses
+  + filters
+  + lo
+}
+
+class Bandpasses {
+  + bandpasses
+  + Show()
+}
+
+class Bandpass {
+  + lo
+  + hi
+  + bw
+  + center
+  + target
+  + changes
+  + mix(freq)
+  + mixDown(freq)
+  + mixUp(freq)
+  + filter(lo, hi)
+}
+
+class Vdef {
+  + freq_w_av_vel
+  + v_high
+  + v_low
+  + compute_local_frame_w_vdef()
+}
+
+class MinMaxFreqs {
+  + minf
+  + maxf
+  + bw
+  + setMinMax(freq)
+  + setMin(freq)
+  + setMax(freq)
+  + avgFreqs()
+  + computeBW(bw)
+}
+
+IFPathNode *-- IFInfo
+IFInfo *-- Bandpasses
+Bandpasses "1" *-- "n" Bandpass
+
+@enduml
