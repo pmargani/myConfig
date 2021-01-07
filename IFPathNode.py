@@ -70,7 +70,11 @@ class IFPathNode:
         # # any filters being applied?
         # self.filters = []
 
-
+    def getBankName(self):
+        if self.type != 'Backend':
+            return None
+        return self.port[0]
+            
     def getPortNumber(self):
         " 'J1' => 1 "
         # TBF: should be handled by class heirarchy?

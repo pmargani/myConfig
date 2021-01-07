@@ -3,7 +3,7 @@ from copy import copy
 # from ifpaths import *
 from paths import getIFPaths
 from StaticDefs import IF3, IFfilters, BEAM_TO_FEED_DES, FILTERS, RCVR_IF_NOMINAL, RCVR_SIDEBAND, vframe
-from StaticDefs import RCVR_FREQS
+from StaticDefs import RCVR_FREQS, DEF_ON_SYSTEMS, DEF_OFF_SYSTEMS
 from Vdef import Vdef
 from MinMaxFreqs import MinMaxFreqs
 from IFPathNode import IFPathNode, IFInfo
@@ -530,6 +530,104 @@ def calcFreqs(config, paths):
 
     return params
 
+def getDCRContinuumParams(config, paths):
+    "Set obvious manager parameters for these types of observations"
+
+    # simple enough!
+    motorRack = ('MotorRack,receiver', config['receiver'])
+
+    dcr = getDCRParams(config, paths)
+
+    scSubsystem = getScanCoordinatorDCRContinuumSysParams(config)
+
+    # more random stuff below
+    scSwitchMaster = ('ScanCoordinator,switching_signals_master', config['backend'])
+    scScanLength = ('ScanCoordinator,scanLength,seconds', 1)
+
+    # TBF: what else?
+
+    # put them together
+    params = [
+       motorRack,
+       scSwitchMaster,
+       scScanLength
+    ]
+    params.extend(dcr)
+    params.extend(scSubsystem)
+
+    return params
+
+        
+def getScanCoordinatorDCRContinuumSysParams(config):
+
+    # what's the default always on managers?
+    d = 'Default'
+    onMgrs = copy(DEF_ON_SYSTEMS[d])
+
+    # then what's on for these observations?
+    # TBF: convert PF receiver names to RcvrPF_1/2:
+    onMgrs.append(config['receiver'])
+    onMgrs.append(config['backend'])
+
+    params = []
+
+    # set params for those that are off, but maybe should be on?
+    d = 'Default'
+    systems = copy(DEF_OFF_SYSTEMS[d])
+    for mgr in systems:
+        onBool = mgr in onMgrs
+        on = 1 if onBool else 0
+        param = ('ScanCoordinator,subsystemSelect,%s' % mgr, on)
+        params.append(param)
+
+    # make sure everything's covered
+    for mgr in onMgrs:
+        param = ('ScanCoordinator,subsystemSelect,%s' % mgr, 1)
+        if param not in params:
+            params.append(param)
+
+    return params
+
+
+def getDCRParams(config, paths):
+    "Use the paths information to determine some DCR params"
+
+    params = []
+
+    # last node of each path tells us what channels to select
+    selectedPorts = []
+    banks = []
+    for path in paths:
+        backendNode = path[-1]
+        assert backendNode.type == 'Backend'
+        assert backendNode.device == 'DCR'
+        selectedPorts.append(backendNode.getPortNumber())
+        banks.append(backendNode.getBankName())
+
+    # DCR Channel,11 0
+    # DCR Bank Bank_A
+
+    numChannels = 16
+    for i in range(1, numChannels+1):
+        onBool = i in selectedPorts  
+        on = 1 if onBool else 0
+        # TBF: we can't check each DCR channel because of the
+        # arbitrary difference in paths taken between our code
+        # and production!
+        # params.append(('DCR,Channel,%d' % i, on))
+
+
+    # TBF: handle better
+    bankparam = ('DCR,Bank', "Bank_%s" % banks[0])
+    params.append(bankparam)
+
+    cyclesParam = ('DCR,CyclesPerIntegration', 1)
+    params.append(cyclesParam)
+
+    return params
+
+
+
 def configureDCR(config, pathsFile=None, debug=False):
     """
     The Main Event.
@@ -538,10 +636,17 @@ def configureDCR(config, pathsFile=None, debug=False):
     """
     paths = getDCRPaths(config, pathsFile=pathsFile, debug=debug)
     params = calcFreqs(config, paths)
+
+    # get more parameters: First ones from the DB
     dbParams = getDBParamsFromConfig(config, dct=False)
     # convert 3 tuple to 2 tuple
     for mgr, param, value in dbParams:
         params.append(("%s,%s" % (mgr, param), value))
+
+    # then some really simple ones from what we've done so far    
+    params.extend(getDCRContinuumParams(config, paths))
+        
+
     return paths, params
 
     

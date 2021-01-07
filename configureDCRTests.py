@@ -55,7 +55,7 @@ class TestConfigureDCR(unittest.TestCase):
 
         # convert our tuples to dictionary
         ourParams = {}
-        print("our params:")
+        print("our params for rx:", rx)
         for mgrParam, value in params:
             print(mgrParam, value)
             idx = mgrParam.find(',')
@@ -66,17 +66,24 @@ class TestConfigureDCR(unittest.TestCase):
             ourParams[mgr][paramName] = value
             
         # make sure whatever we are setting so far, has been set
-        # the same way in the config logs    
+        # the same way in the config logs   
+        ourUniqueMgrCnt = 0 
+        ourUniqueParamCnt = 0 
+        uniqueMgrCnt = 0
+        uniqueParamCnt = 0
+
         for mgr, paramValues in ourParams.items():
             for param, value in paramValues.items():
                 if mgr not in configParams:
                     print("We have this manager, but config tool does not: ", mgr)
+                    ourUniqueMgrCnt += 1
                     continue
 
                 # print (mgr, param, value)
                 # print (configParams[mgr][param])
                 if param not in configParams[mgr]:
                     print("We set this but config tool didn't", mgr, param)
+                    ourUniqueParamCnt += 1
                     continue
                 if str(configParams[mgr][param]) != str(value):
                     print("We set: ", mgr, param, value)
@@ -87,18 +94,24 @@ class TestConfigureDCR(unittest.TestCase):
         # what did config tool set that we did not?
         for mgrCT, paramsCT in configParams.items():
             if mgrCT not in ourParams:
-                print("Config Tool set this manager's params, but we did not:", mgrCT)
+                print("Config Tool set this manager, but we did not:", mgrCT)
+                uniqueMgrCnt += 1
                 continue
             for paramNameCT, paramValueCT in paramsCT.items():
 
                 if paramNameCT not in ourParams[mgrCT]:
                     print("CT set this but we didn't", mgrCT, paramNameCT, paramValueCT)
+                    uniqueParamCnt += 1
 
-        if "IFRack" in configParams:
-            print ("IFRack filter values")
-            for k, v in configParams["IFRack"].items():
-                if "filter" in k:
-                    print (k, v)
+        # if "IFRack" in configParams:
+        #     print ("IFRack filter values")
+        #     for k, v in configParams["IFRack"].items():
+        #         if "filter" in k:
+        #             print (k, v)
+
+        # report
+        print("Num mgrs and parameters we set that config didn't: ", ourUniqueMgrCnt, ourUniqueParamCnt)
+        print("Num mgrs and parameters config tool set that we didn't: ", uniqueMgrCnt, uniqueParamCnt)
 
     def assertExpParamsInConfigParams(self, expParams, params):   
         "make sure expParams list finds a match in given params" 
@@ -363,7 +376,7 @@ class TestConfigureDCR(unittest.TestCase):
         # assert params == expParams
 
         # self.assertExpParamsInConfigParams(expParams, params) 
-        
+
         self.checkBandpasses(paths, 3, 5000., 3000.)
 
         self.compareParams(rx, params)
