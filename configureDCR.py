@@ -8,6 +8,7 @@ from Vdef import Vdef
 from MinMaxFreqs import MinMaxFreqs
 from IFPathNode import IFPathNode, IFInfo
 from Bandpasses import Bandpasses, Bandpass
+from dbParams import getDBParamsFromConfig
 
 LO1_FIRST_RXS = ['Rcvr8_10']
 
@@ -537,6 +538,10 @@ def configureDCR(config, pathsFile=None, debug=False):
     """
     paths = getDCRPaths(config, pathsFile=pathsFile, debug=debug)
     params = calcFreqs(config, paths)
+    dbParams = getDBParamsFromConfig(config, dct=False)
+    # convert 3 tuple to 2 tuple
+    for mgr, param, value in dbParams:
+        params.append(("%s,%s" % (mgr, param), value))
     return paths, params
 
     

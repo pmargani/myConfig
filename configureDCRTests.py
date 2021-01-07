@@ -69,6 +69,10 @@ class TestConfigureDCR(unittest.TestCase):
         # the same way in the config logs    
         for mgr, paramValues in ourParams.items():
             for param, value in paramValues.items():
+                if mgr not in configParams:
+                    print("We have this manager, but config tool does not: ", mgr)
+                    continue
+
                 # print (mgr, param, value)
                 # print (configParams[mgr][param])
                 if param not in configParams[mgr]:
@@ -80,11 +84,31 @@ class TestConfigureDCR(unittest.TestCase):
                 # assert str(configParams[mgr][param]) == str(value)
                 self.assertEqual(str(configParams[mgr][param]), str(value))
 
+        # what did config tool set that we did not?
+        for mgrCT, paramsCT in configParams.items():
+            if mgrCT not in ourParams:
+                print("Config Tool set this manager's params, but we did not:", mgrCT)
+                continue
+            for paramNameCT, paramValueCT in paramsCT.items():
+
+                if paramNameCT not in ourParams[mgrCT]:
+                    print("CT set this but we didn't", mgrCT, paramNameCT, paramValueCT)
+
         if "IFRack" in configParams:
             print ("IFRack filter values")
             for k, v in configParams["IFRack"].items():
                 if "filter" in k:
                     print (k, v)
+
+    def assertExpParamsInConfigParams(self, expParams, params):   
+        "make sure expParams list finds a match in given params" 
+        for expMgrParam, expValue in expParams:
+            fnd = False
+            for mgrParam, value in params:
+                if mgrParam == expMgrParam:    
+                    fnd = True
+                    self.assertEqual(value, expValue)
+            self.assertTrue(fnd)
 
     def test_RcvrPF_1(self):
         "Mimics Configure('Continuum with Rcvr342')"
@@ -151,6 +175,7 @@ class TestConfigureDCR(unittest.TestCase):
         # compare to production mgr param values
         self.compareParams(rx, params)
 
+
     def test_Rcvr1_2(self):
         "Mimics Configure('Continuum with Rcvr1_2')"
 
@@ -203,7 +228,11 @@ class TestConfigureDCR(unittest.TestCase):
             ('IFRack,filter_select,3', 'pass_2960_3040')
         ]
         self.assertEqual(pathNames, expPaths)
-        self.assertEqual(params, expParams)
+
+
+                    
+        self.assertExpParamsInConfigParams(expParams, params)            
+        # self.assertEqual(params, expParams)
 
         self.checkBandpasses(paths, 4, 1400., 3000.)
 
@@ -266,7 +295,8 @@ class TestConfigureDCR(unittest.TestCase):
         ]
 
         assert pathNames == expPaths
-        assert params == expParams
+        # assert params == expParams
+        self.assertExpParamsInConfigParams(expParams, params) 
 
         self.checkBandpasses(paths, 4, 2000., 6000.)
 
@@ -317,20 +347,23 @@ class TestConfigureDCR(unittest.TestCase):
         # ]
 
         #  # test freq. related params set
-        # expParams = [
-        #     ('Rcvr8_10,leftIfFilterSwitch', 'narrowband'),
-        #     ('Rcvr8_10,rightIfFilterSwitch', 'narrowband'),
-        #     ('LO1,restFrequency', 9000),
-        #     ('LO1,velocityDefinition', 'Radio'),
-        #     ('LO1,sourceVelocity,position', 0.0),
-        #     ('LO1,restFrame', 'Local'),
-        #     ('LO1,ifCenterFreq', 3000.0),
-        #     ('IFRack,filter_select,1', 'pass_2960_3040'),
-        #     ('IFRack,filter_select,3', 'pass_2960_3040')
-        # ]
+        expParams = [
+            ('Rcvr8_10,leftIfFilterSwitch', 'narrowband'),
+            ('Rcvr8_10,rightIfFilterSwitch', 'narrowband'),
+            ('LO1,restFrequency', 9000),
+            ('LO1,velocityDefinition', 'Radio'),
+            ('LO1,sourceVelocity,position', 0.0),
+            ('LO1,restFrame', 'Local'),
+            ('LO1,ifCenterFreq', 3000.0),
+            ('IFRack,filter_select,1', 'pass_2960_3040'),
+            ('IFRack,filter_select,3', 'pass_2960_3040')
+        ]
 
         # assert pathNames == expPaths
         # assert params == expParams
+
+        # self.assertExpParamsInConfigParams(expParams, params) 
+        
         self.checkBandpasses(paths, 3, 5000., 3000.)
 
         self.compareParams(rx, params)
@@ -396,7 +429,8 @@ class TestConfigureDCR(unittest.TestCase):
         ]
 
         assert pathNames == expPaths
-        assert params == expParams
+        # assert params == expParams
+        self.assertExpParamsInConfigParams(expParams, params) 
 
         self.checkBandpasses(paths, 4, 9000., 3000.)
 
