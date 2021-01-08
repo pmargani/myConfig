@@ -11,6 +11,8 @@ from IFPathNode import IFPathNode, IFInfo
 from Bandpasses import Bandpasses, Bandpass
 from dbParams import getDBParamsFromConfig
 from Receiver import Receiver
+from LO1 import LO1
+
 
 LO1_FIRST_RXS = ['Rcvr8_10']
 
@@ -402,7 +404,7 @@ def calcFreqs(config, paths):
 
     # doppler shit sux
     if 'DOPPLERTRACKFREQ' not in config:
-        config['DOPPLERTRACKFREQ'] = config['restfreq']
+        config['DOPPLERTRACKFREQ'] = int(config['restfreq'])
 
     if 'lo2freq' not in config:
         config['lo2freq'] = [0]
@@ -482,12 +484,15 @@ def calcFreqs(config, paths):
         path[0].ifInfo.lo = {'freq': loMixFreq}
 
     # calculate LO1 paramters
-    params.append(("LO1,restFrequency", int(config["DOPPLERTRACKFREQ"])))
-    params.append(("LO1,velocityDefinition", config["vdef"]))
+    # params.append(("LO1,restFrequency", int(config["DOPPLERTRACKFREQ"])))
+    # params.append(("LO1,velocityDefinition", config["vdef"]))
     params.append(("LO1,sourceVelocity,position", velocity))
-    params.append(("LO1,restFrame", velframe))
-    params.append(("LO1,ifCenterFreq", centerFreq))
+    # params.append(("LO1,restFrame", velframe))
+    # params.append(("LO1,ifCenterFreq", centerFreq))
     
+    # TBF: for now use config dct to pass this along
+    config['center_freq'] = centerFreq
+
     # we're now ready to setup the bandpasses in the receiver
     for path in paths:
         # setup the receiver bandpasses
@@ -542,8 +547,18 @@ def getDCRContinuumParams(config, paths):
 
     scSubsystem = getScanCoordinatorDCRContinuumSysParams(config)
 
-    rxMgr = Receiver(config, tuning_freq=config['restfreq'])
+    # TBF: are these correct?
+    tuningFreq = config['restfreq']
+    centerFreq = str(config['center_freq'])
+    velocity = 0.
+    vdef = config['vdef']
+
+    rxMgr = Receiver(config, tuning_freq=tuningFreq)
     rxMgr.setParams()
+
+    # s12 = 4
+    s12 = None
+    lo1 = LO1(config, tuningFreq, centerFreq, velocity, vdef, s12_value=s12)
 
     # more random stuff below
     scSwitchMaster = ('ScanCoordinator,switching_signals_master', config['backend'])
@@ -560,6 +575,7 @@ def getDCRContinuumParams(config, paths):
     params.extend(dcr)
     params.extend(scSubsystem)
     params.extend(rxMgr.getParams())
+    params.extend(lo1.getParams())
 
     return params
 
@@ -659,7 +675,9 @@ def addMissingKeywords(config):
         'notchfilter',
         'polswitch',
         'beamswitch',
-        'xfer'
+        'xfer',
+        # LO1
+        'phasecal',
     ]
 
     # add them

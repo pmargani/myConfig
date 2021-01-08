@@ -120,6 +120,9 @@ class TestConfigureDCR(unittest.TestCase):
             for mgrParam, value in params:
                 if mgrParam == expMgrParam:    
                     fnd = True
+                    if value != expValue:
+                        print("Diff in param", mgrParam)
+                        print(value, " exp: ", expValue)
                     self.assertEqual(value, expValue)
             self.assertTrue(fnd)
 
@@ -240,11 +243,11 @@ class TestConfigureDCR(unittest.TestCase):
         expParams = [
             ('Rcvr1_2,leftIfFilterSwitch', '3'),
             ('Rcvr1_2,rightIfFilterSwitch', '3'),
-            ('LO1,restFrequency', 1400),
+            # ('LO1,restFrequency', '1400'),
             ('LO1,velocityDefinition', 'Radio'),
             ('LO1,sourceVelocity,position', 0.0),
             ('LO1,restFrame', 'Local'),
-            ('LO1,ifCenterFreq', 3000.0),
+            ('LO1,ifCenterFreq', '3000.0'),
             ('IFRack,filter_select,1', 'pass_2960_3040'),
             ('IFRack,filter_select,3', 'pass_2960_3040')
         ]
@@ -309,11 +312,11 @@ class TestConfigureDCR(unittest.TestCase):
         expParams = [
             ('Rcvr2_3,leftIfFilterSwitch', '2'),
             ('Rcvr2_3,rightIfFilterSwitch', '2'),
-            ('LO1,restFrequency', 2000),
+            # ('LO1,restFrequency', 2000),
             ('LO1,velocityDefinition', 'Radio'),
             ('LO1,sourceVelocity,position', 0.0),
             ('LO1,restFrame', 'Local'),
-            ('LO1,ifCenterFreq', 6000.0),
+            ('LO1,ifCenterFreq', '6000.0'),
             ('IFRack,filter_select,1', 'pass_5960_6040'),
             ('IFRack,filter_select,3', 'pass_5960_6040')
         ]
@@ -374,11 +377,11 @@ class TestConfigureDCR(unittest.TestCase):
         expParams = [
             ('Rcvr8_10,leftIfFilterSwitch', 'narrowband'),
             ('Rcvr8_10,rightIfFilterSwitch', 'narrowband'),
-            ('LO1,restFrequency', 9000),
+            # ('LO1,restFrequency', 9000),
             ('LO1,velocityDefinition', 'Radio'),
             ('LO1,sourceVelocity,position', 0.0),
             ('LO1,restFrame', 'Local'),
-            ('LO1,ifCenterFreq', 3000.0),
+            ('LO1,ifCenterFreq', '3000.0'),
             ('IFRack,filter_select,1', 'pass_2960_3040'),
             ('IFRack,filter_select,3', 'pass_2960_3040')
         ]
@@ -443,11 +446,11 @@ class TestConfigureDCR(unittest.TestCase):
         expParams = [
             ('Rcvr8_10,leftIfFilterSwitch', 'narrowband'),
             ('Rcvr8_10,rightIfFilterSwitch', 'narrowband'),
-            ('LO1,restFrequency', 9000),
+            # ('LO1,restFrequency', 9000),
             ('LO1,velocityDefinition', 'Radio'),
             ('LO1,sourceVelocity,position', 0.0),
             ('LO1,restFrame', 'Local'),
-            ('LO1,ifCenterFreq', 3000.0),
+            ('LO1,ifCenterFreq', '3000.0'),
             ('IFRack,filter_select,1', 'pass_2960_3040'),
             ('IFRack,filter_select,3', 'pass_2960_3040')
         ]
