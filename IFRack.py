@@ -108,7 +108,6 @@ class IFRack:
                 # if isinstance(node, str):
                 if True:    
                     if "SWITCH" in node.name:
-                        print("SWTICH:", node.name)
                         # sw, num = node.split("H")
                         # self.ifrack_sw_used.append(int(num))
                         # self.ifrack_sw_used.append(node.getPortNumber())
@@ -123,7 +122,6 @@ class IFRack:
                             self.cross_switches_used.append(values)
                     # find the IFrouter inputs
                     if "IFRouter" in node.name:
-                        print("IFRouter:", node.name)
                         # name, conn = node.split(":")
                         # junk, num_str = node.split("J")
                         # num = int(num_str)
@@ -134,9 +132,9 @@ class IFRack:
                             sw_num = int((num - 1) / 8) + 1
                             self.input_sw[sw_num] = \
                                 str((num - 1) % 8 + 1) 
-        print("switches used", self.switches_used)
-        print("cross switches used", self.cross_switches_used)
-        print("input_sw: ", self.input_sw)
+        # print("switches used", self.switches_used)
+        # print("cross switches used", self.cross_switches_used)
+        # print("input_sw: ", self.input_sw)
 
     def getParams(self, triplet=False):
         if triplet:

@@ -100,7 +100,7 @@ def getFirstLikeDeviceNode(path, device):
     devices = [n for n in path if device in n.name]
     return None if len(devices) == 0 else devices[0]
 
-def getArbitraryFirstPath(ifPaths, rx, backend, beam, debug=False):
+def getArbitraryFirstPath(ifPaths, rx, backend, beam, debug=False, firstBackendNode=None):
     "Choose the first path you come across that gets you from the first rx feed to the backend"
 
     # short hand
@@ -112,6 +112,10 @@ def getArbitraryFirstPath(ifPaths, rx, backend, beam, debug=False):
     # get a path with the first feed to backend:
     # what are the graph nodes for our backend?  Sorting by port number
     backendNodes = getSortedBackendNodes(g, backend)
+    if firstBackendNode is not None:
+        backendNodes = [IFPathNode(firstBackendNode)]
+        if debug:
+            print("Constained to use backend node: ", firstBackendNode)
     backendNames = [b.name for b in backendNodes]
 
     if debug:
@@ -142,14 +146,15 @@ def getArbitraryFirstPath(ifPaths, rx, backend, beam, debug=False):
         if debug:
             print("found # paths between %s and %s: %d" % (firstFeed1Node, backendNode, len(feed1paths)))
             print(feed1paths) 
+            print("Constained to use backend node: ", firstBackendNode)
         if len(feed1paths) > 0:    
             # arbitrarily pick the first path
             feed1path = feed1paths[0]
-            break
+            break  
 
     return feed1path
 
-def getDCRPaths(config, pathsFile=None, debug=False):
+def getDCRPaths(config, pathsFile=None, debug=False, firstBackendNode=None):
     "Returns the paths that satisfy the given configuration"
 
     rx = config["receiver"]
@@ -174,7 +179,14 @@ def getDCRPaths(config, pathsFile=None, debug=False):
         for path in paths:
             print(path[0], path[-1])
 
-    feed1path = getArbitraryFirstPath(paths, rx, backend, beam, debug=debug)
+    feed1path = getArbitraryFirstPath(
+        paths,
+        rx,
+        backend,
+        beam,
+        debug=debug,
+        firstBackendNode=firstBackendNode
+    )
 
     feeds = BEAM_TO_FEED_DES[rx][beam]
 
@@ -319,7 +331,7 @@ def setRxFilters(receiver, tuning_freq, bw_total):
 
 def setIFFilters(total_bw_low, total_bw_high, ifpath):
     "Returns IFRack parameters and updates paths bandpass info"
-    print("setIFFilters", total_bw_low, total_bw_high)
+    # print("setIFFilters", total_bw_low, total_bw_high)
 
     params = []
     for path in ifpath:
@@ -333,7 +345,7 @@ def setIFFilters(total_bw_low, total_bw_high, ifpath):
                 # filter_value = f[0]
             if fLow <= total_bw_low and fHigh >= total_bw_high:
                 filter_value = fv
-                print("print found good filter at", filter_value, fLow, fHigh)
+                # print("print found good filter at", filter_value, fLow, fHigh)
                 break
 
         opticalDriver = getFirstLikeDeviceNode(path, "OpticalDriver")        
@@ -370,21 +382,18 @@ def getFilterBandpasses(bp1, rxNode):
 
 def getLO1Bandpass(bp1, rxNode, lowerSideband=None):
     "Return bandpass representing receivers LO1 mixing"
-    print("getLO1Bandpass", bp1, rxNode, lowerSideband)
     if lowerSideband is None:
         s = RCVR_SIDEBAND[rxNode.device]
         lowerSideband = s == -1
-        print("RCVR_SIDEBAND", s, lowerSideband)
 
     bpLO1 = copy(bp1)
     loMixFreq = rxNode.ifInfo.lo['freq']
     bpLO1.mix(loMixFreq, lowerSideband=lowerSideband)
     sideband = "lower" if lowerSideband else "upper"
-    print("sideband", sideband)
     bpLO1.changes = "LO %s sideband at %f" % (sideband, loMixFreq)
     return bpLO1
 
-def calcFreqs(config, paths):
+def calcFreqs(config, paths, debug=False):
     "Make the bandpass decisions to get our signal to the backend"
 
     # we'll return what manager parameters are set here
@@ -423,7 +432,8 @@ def calcFreqs(config, paths):
     ifNom = RCVR_IF_NOMINAL[receiver]
     multiplier1 = RCVR_SIDEBAND[receiver]
     freqLocal = compute_Flocal(config)
-    print("IF1 computed from: ", multiplier1, freqLocal, skyFreq, ifNom)
+    if debug:
+        print("IF1 computed from: ", multiplier1, freqLocal, skyFreq, ifNom)
     # Compute the IF frequencies!  What equation is this????
     if1 = (multiplier1 * (freqLocal - skyFreq) + ifNom)
     if receiver == "Rcvr26_40": # W-band too!
@@ -534,7 +544,8 @@ def calcFreqs(config, paths):
 
     # now that we're done, print the bandpasses to make sure
     # that we got it right
-    traceFreqs(paths)
+    if debug:
+        traceFreqs(paths)
 
     return params
 
@@ -658,7 +669,7 @@ def getDCRParams(config, paths):
         # TBF: we can't check each DCR channel because of the
         # arbitrary difference in paths taken between our code
         # and production!
-        # params.append(('DCR,Channel,%d' % i, on))
+        params.append(('DCR,Channel,%d' % i, on))
 
 
     # TBF: handle better
@@ -693,7 +704,7 @@ def addMissingKeywords(config):
         if k not in config:
             config[k] = None
 
-def configureDCR(config, pathsFile=None, debug=False):
+def configureDCR(config, pathsFile=None, debug=False, firstBackendNode=None):
     """
     The Main Event.
     Here we are given a standard config tool dictionary.  We return
@@ -708,11 +719,11 @@ def configureDCR(config, pathsFile=None, debug=False):
     rxMgr.setReceiverDefaults(config)
 
     # now find how we're getting from our rx to the DCR
-    paths = getDCRPaths(config, pathsFile=pathsFile, debug=debug)
+    paths = getDCRPaths(config, pathsFile=pathsFile, debug=debug, firstBackendNode=firstBackendNode)
 
     # now add frequency info to these paths, and return some
     # related manager parameters
-    params = calcFreqs(config, paths)
+    params = calcFreqs(config, paths, debug=debug)
 
     # get more parameters: First ones from the DB
     dbParams = getDBParamsFromConfig(config, dct=False)
