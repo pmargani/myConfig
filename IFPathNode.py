@@ -90,6 +90,7 @@ class IFPathNode:
         try:
             portNumber = int(self.port[1:])
         except:
+            print ("***** Could not get port number from", self.port)
             portNumber = -1
         return portNumber
 

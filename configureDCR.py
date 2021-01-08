@@ -12,6 +12,7 @@ from Bandpasses import Bandpasses, Bandpass
 from dbParams import getDBParamsFromConfig
 from Receiver import Receiver
 from LO1 import LO1
+from IFRack import IFRack
 
 
 LO1_FIRST_RXS = ['Rcvr8_10']
@@ -560,6 +561,10 @@ def getDCRContinuumParams(config, paths):
     s12 = None
     lo1 = LO1(config, tuningFreq, centerFreq, velocity, vdef, s12_value=s12)
 
+    ifRack = IFRack(config, paths, rxMgr)
+    # TBF: why is this singled out to be called last in config tool?
+    ifRack.set_laser_power()
+
     # more random stuff below
     scSwitchMaster = ('ScanCoordinator,switching_signals_master', config['backend'])
     scScanLength = ('ScanCoordinator,scanLength,seconds', 1)
@@ -576,6 +581,7 @@ def getDCRContinuumParams(config, paths):
     params.extend(scSubsystem)
     params.extend(rxMgr.getParams())
     params.extend(lo1.getParams())
+    params.extend(ifRack.getParams())
 
     return params
 
@@ -678,6 +684,8 @@ def addMissingKeywords(config):
         'xfer',
         # LO1
         'phasecal',
+        # IFRack
+        'iftarget',
     ]
 
     # add them
