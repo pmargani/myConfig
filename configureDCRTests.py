@@ -199,7 +199,7 @@ class TestConfigureDCR(unittest.TestCase):
             'obstype'   : 'Continuum',
             'backend'   : 'DCR',
             'nwin'      : 1,
-            'restfreq'  : 1400,
+            'restfreq'  : 1400.0,
             'deltafreq' : 0,
             'bandwidth' : 80,
             'swmode'    : "tp",
@@ -214,6 +214,14 @@ class TestConfigureDCR(unittest.TestCase):
             'noisecal'  :  "lo",
             'pol'       : "Linear"
         }
+
+        # config['polarization'] = None
+        # config['notchfilter'] = None
+        # config['polswitch'] = None
+
+        # add these!  But how and why? TF
+        # config['polarization'] = config['pol']
+        # config['polswitch'] = 'thru'
 
         rx = config["receiver"]
         fn = "zdb.201118.pkl.%s.txt" % rx  
@@ -262,7 +270,7 @@ class TestConfigureDCR(unittest.TestCase):
             'obstype'   : 'Continuum',
             'backend'   : 'DCR',
             'nwin'      : 1,
-            'restfreq'  : 2000,
+            'restfreq'  : 2000.0,
             'deltafreq' : 0,
             'bandwidth' : 80,
             'swmode'    : "tp",
@@ -278,6 +286,9 @@ class TestConfigureDCR(unittest.TestCase):
             'pol'       : "Linear",
         }
             
+        # add these!  But how and why? TF
+        # config['polarization'] = config['pol']
+        # config['polswitch'] = 'thru'
 
         rx = config["receiver"]
         fn = "zdb.201118.pkl.%s.txt" % rx  
@@ -326,7 +337,7 @@ class TestConfigureDCR(unittest.TestCase):
             'obstype'   : 'Continuum',
             'backend'   : 'DCR',
             'nwin'      : 1,
-            'restfreq'  : 5000, # changes
+            'restfreq'  : 5000., # changes
             'deltafreq' : 0,
             'bandwidth' : 80,
             'swmode'    : "tp",
@@ -392,7 +403,7 @@ class TestConfigureDCR(unittest.TestCase):
             'obstype'   : 'Continuum',
             'backend'   : 'DCR',
             'nwin'      : 1,
-            'restfreq'  : 9000, # changes
+            'restfreq'  : 9000., # changes
             'deltafreq' : 0,
             'bandwidth' : 80,
             'swmode'    : "tp",
@@ -462,7 +473,7 @@ class TestConfigureDCR(unittest.TestCase):
             'obstype'   : 'Continuum',
             'backend'   : 'DCR',
             'nwin'      : 1,
-            'restfreq'  : 14000, # changes
+            'restfreq'  : 14000., # changes
             'deltafreq' : 0,
             'bandwidth' : 320, # changed from 80!
             'swmode'    : "tp",
@@ -503,7 +514,7 @@ class TestConfigureDCR(unittest.TestCase):
             'obstype'   : 'Continuum',
             'backend'   : 'DCR',
             'nwin'      : 1,
-            'restfreq'  : 32000, # changes
+            'restfreq'  : 32000., # changes
             'deltafreq' : 0,
             'bandwidth' : 320, # changed from 80!
             'swmode'    : "sp", # changed!

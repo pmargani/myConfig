@@ -4,11 +4,13 @@ from copy import copy
 from paths import getIFPaths
 from StaticDefs import IF3, IFfilters, BEAM_TO_FEED_DES, FILTERS, RCVR_IF_NOMINAL, RCVR_SIDEBAND, vframe
 from StaticDefs import RCVR_FREQS, DEF_ON_SYSTEMS, DEF_OFF_SYSTEMS
+from StaticDefs import QD_AND_ACTIVE_SURFACE_ON_RCVRS, PFRCVRS, PF2RCVRS
 from Vdef import Vdef
 from MinMaxFreqs import MinMaxFreqs
 from IFPathNode import IFPathNode, IFInfo
 from Bandpasses import Bandpasses, Bandpass
 from dbParams import getDBParamsFromConfig
+from Receiver import Receiver
 
 LO1_FIRST_RXS = ['Rcvr8_10']
 
@@ -480,7 +482,7 @@ def calcFreqs(config, paths):
         path[0].ifInfo.lo = {'freq': loMixFreq}
 
     # calculate LO1 paramters
-    params.append(("LO1,restFrequency", config["DOPPLERTRACKFREQ"]))
+    params.append(("LO1,restFrequency", int(config["DOPPLERTRACKFREQ"])))
     params.append(("LO1,velocityDefinition", config["vdef"]))
     params.append(("LO1,sourceVelocity,position", velocity))
     params.append(("LO1,restFrame", velframe))
@@ -540,6 +542,9 @@ def getDCRContinuumParams(config, paths):
 
     scSubsystem = getScanCoordinatorDCRContinuumSysParams(config)
 
+    rxMgr = Receiver(config, tuning_freq=config['restfreq'])
+    rxMgr.setParams()
+
     # more random stuff below
     scSwitchMaster = ('ScanCoordinator,switching_signals_master', config['backend'])
     scScanLength = ('ScanCoordinator,scanLength,seconds', 1)
@@ -554,6 +559,7 @@ def getDCRContinuumParams(config, paths):
     ]
     params.extend(dcr)
     params.extend(scSubsystem)
+    params.extend(rxMgr.getParams())
 
     return params
 
@@ -565,15 +571,31 @@ def getScanCoordinatorDCRContinuumSysParams(config):
     onMgrs = copy(DEF_ON_SYSTEMS[d])
 
     # then what's on for these observations?
-    # TBF: convert PF receiver names to RcvrPF_1/2:
-    onMgrs.append(config['receiver'])
     onMgrs.append(config['backend'])
+
+    # convert PF receiver names to RcvrPF_1/2:
+    # onMgrs.append(config['receiver'])
+    rx = config['receiver']
+    if rx in PFRCVRS:
+        rx = 'RcvrPF_1'
+    if rx in PF2RCVRS:
+        rx = 'RcvrPF_2'
+    onMgrs.append(rx)        
+
+    # will the QD and Active Surface mgrs be on?
+    QD = 'QuadrantDetector'
+    AS = 'ActiveSurface'
+    qdActiveSurfaceOn = rx in QD_AND_ACTIVE_SURFACE_ON_RCVRS
+    if qdActiveSurfaceOn:
+        onMgrs.extend([QD, AS])
 
     params = []
 
     # set params for those that are off, but maybe should be on?
-    d = 'Default'
     systems = copy(DEF_OFF_SYSTEMS[d])
+    if not qdActiveSurfaceOn:
+        systems.extend([QD, AS])
+
     for mgr in systems:
         onBool = mgr in onMgrs
         on = 1 if onBool else 0
@@ -627,6 +649,23 @@ def getDCRParams(config, paths):
     return params
 
 
+def addMissingKeywords(config):
+    "Config tool expands all configs to more then 50 values."
+
+    # Here we'll just add what we need as we go
+    ks = [
+        # needed by Receiver.setReceiverDefaults
+        'polarization',
+        'notchfilter',
+        'polswitch',
+        'beamswitch',
+        'xfer'
+    ]
+
+    # add them
+    for k in ks:
+        if k not in config:
+            config[k] = None
 
 def configureDCR(config, pathsFile=None, debug=False):
     """
@@ -634,7 +673,19 @@ def configureDCR(config, pathsFile=None, debug=False):
     Here we are given a standard config tool dictionary.  We return
     the resultant paths (lists of IFPathNodes) and the manager params.
     """
+
+    # first let's add any necessary missing keywords
+    addMissingKeywords(config)
+
+    # let's expand the configuration with defaults
+    rxMgr = Receiver(config)
+    rxMgr.setReceiverDefaults(config)
+
+    # now find how we're getting from our rx to the DCR
     paths = getDCRPaths(config, pathsFile=pathsFile, debug=debug)
+
+    # now add frequency info to these paths, and return some
+    # related manager parameters
     params = calcFreqs(config, paths)
 
     # get more parameters: First ones from the DB
