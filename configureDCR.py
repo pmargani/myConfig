@@ -10,10 +10,13 @@ from MinMaxFreqs import MinMaxFreqs
 from IFPathNode import IFPathNode, IFInfo
 from Bandpasses import Bandpasses, Bandpass
 from dbParams import getDBParamsFromConfig
+
+# Managers
 from Receiver import Receiver
 from LO1 import LO1
 from IFRack import IFRack
-
+from DCR import DCR
+from ScanCoordinator import ScanCoordinator
 
 LO1_FIRST_RXS = ['Rcvr8_10']
 
@@ -576,17 +579,11 @@ def getDCRContinuumParams(config, paths):
     # TBF: why is this singled out to be called last in config tool?
     ifRack.set_laser_power()
 
-    # more random stuff below
-    scSwitchMaster = ('ScanCoordinator,switching_signals_master', config['backend'])
-    scScanLength = ('ScanCoordinator,scanLength,seconds', 1)
-
     # TBF: what else?
 
     # put them together
     params = [
        motorRack,
-       scSwitchMaster,
-       scScanLength
     ]
     params.extend(dcr)
     params.extend(scSubsystem)
@@ -598,89 +595,18 @@ def getDCRContinuumParams(config, paths):
 
         
 def getScanCoordinatorDCRContinuumSysParams(config):
-
-    # what's the default always on managers?
-    d = 'Default'
-    onMgrs = copy(DEF_ON_SYSTEMS[d])
-
-    # then what's on for these observations?
-    onMgrs.append(config['backend'])
-
-    # convert PF receiver names to RcvrPF_1/2:
-    # onMgrs.append(config['receiver'])
-    rx = config['receiver']
-    if rx in PFRCVRS:
-        rx = 'RcvrPF_1'
-    if rx in PF2RCVRS:
-        rx = 'RcvrPF_2'
-    onMgrs.append(rx)        
-
-    # will the QD and Active Surface mgrs be on?
-    QD = 'QuadrantDetector'
-    AS = 'ActiveSurface'
-    qdActiveSurfaceOn = rx in QD_AND_ACTIVE_SURFACE_ON_RCVRS
-    if qdActiveSurfaceOn:
-        onMgrs.extend([QD, AS])
-
-    params = []
-
-    # set params for those that are off, but maybe should be on?
-    systems = copy(DEF_OFF_SYSTEMS[d])
-    if not qdActiveSurfaceOn:
-        systems.extend([QD, AS])
-
-    for mgr in systems:
-        onBool = mgr in onMgrs
-        on = 1 if onBool else 0
-        param = ('ScanCoordinator,subsystemSelect,%s' % mgr, on)
-        params.append(param)
-
-    # make sure everything's covered
-    for mgr in onMgrs:
-        param = ('ScanCoordinator,subsystemSelect,%s' % mgr, 1)
-        if param not in params:
-            params.append(param)
-
-    return params
-
+    "Use the config info to set the managers ScanCoordinator will use"
+    
+    sc = ScanCoordinator(config)
+    sc.findParameterValues()
+    return sc.getParams()
 
 def getDCRParams(config, paths):
     "Use the paths information to determine some DCR params"
 
-    params = []
-
-    # last node of each path tells us what channels to select
-    selectedPorts = []
-    banks = []
-    for path in paths:
-        backendNode = path[-1]
-        assert backendNode.type == 'Backend'
-        assert backendNode.device == 'DCR'
-        selectedPorts.append(backendNode.getPortNumber())
-        banks.append(backendNode.getBankName())
-
-    # DCR Channel,11 0
-    # DCR Bank Bank_A
-
-    numChannels = 16
-    for i in range(1, numChannels+1):
-        onBool = i in selectedPorts  
-        on = 1 if onBool else 0
-        # TBF: we can't check each DCR channel because of the
-        # arbitrary difference in paths taken between our code
-        # and production!
-        params.append(('DCR,Channel,%d' % i, on))
-
-
-    # TBF: handle better
-    bankparam = ('DCR,Bank', "Bank_%s" % banks[0])
-    params.append(bankparam)
-
-    cyclesParam = ('DCR,CyclesPerIntegration', 1)
-    params.append(cyclesParam)
-
-    return params
-
+    dcr = DCR(config, paths)
+    dcr.findDCRParams()
+    return dcr.getParams()
 
 def addMissingKeywords(config):
     "Config tool expands all configs to more then 50 values."
@@ -711,19 +637,27 @@ def configureDCR(config, pathsFile=None, debug=False, firstBackendNode=None):
     the resultant paths (lists of IFPathNodes) and the manager params.
     """
 
+    # Step 1: expand user's configuration
+
     # first let's add any necessary missing keywords
     addMissingKeywords(config)
 
     # let's expand the configuration with defaults
     rxMgr = Receiver(config)
-    rxMgr.setReceiverDefaults(config)
+    rxMgr.setReceiverDefaultsForConfig(config)
+
+    # Step 2: find IF paths 
 
     # now find how we're getting from our rx to the DCR
     paths = getDCRPaths(config, pathsFile=pathsFile, debug=debug, firstBackendNode=firstBackendNode)
 
+    # Step 3: define bandpasses
+
     # now add frequency info to these paths, and return some
     # related manager parameters
     params = calcFreqs(config, paths, debug=debug)
+
+    # Last Step: translate everything into manager parameters
 
     # get more parameters: First ones from the DB
     dbParams = getDBParamsFromConfig(config, dct=False)
