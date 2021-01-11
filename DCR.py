@@ -4,11 +4,11 @@ class DCR(Manager):
 
     "Responsible for turning config and if path info into DCR params"
 
-    def __init__(self, config, paths):
+    def __init__(self, config, ifPaths):
 
         super(DCR, self).__init__(config)
 
-        self.paths = paths
+        self.ifPaths = ifPaths
         self.numChannels = 16
         self.mgrName = 'DCR'
 
@@ -18,8 +18,8 @@ class DCR(Manager):
         # last node of each path tells us what channels to select
         selectedPorts = []
         banks = []
-        for path in self.paths:
-            backendNode = path[-1]
+        for path in self.ifPaths.paths:
+            backendNode = path.getBackendNode() #path[-1]
             assert backendNode.type == 'Backend'
             assert backendNode.device == self.mgrName
             selectedPorts.append(backendNode.getPortNumber())

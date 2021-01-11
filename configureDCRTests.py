@@ -9,10 +9,10 @@ class TestConfigureDCR(unittest.TestCase):
 
         self.debug = False
 
-    def checkBandpasses(self, paths, numExpBandpasses, ifFirst, ifLast):
+    def checkBandpasses(self, ifPaths, numExpBandpasses, ifFirst, ifLast):
         "Asserts that bandpasses for each path make sense"
-        for path in paths:
-            bps = self.aggregatePathBandpasses(path)
+        for ifPath in ifPaths.paths:
+            bps = ifPath.aggregatePathBandpasses()
             self.assertEqual(numExpBandpasses, bps.getNumBandpasses())
             self.assertEqual(bps.bandpasses[0].target, ifFirst)
             self.assertEqual(bps.bandpasses[-1].target, ifLast)
@@ -138,6 +138,15 @@ class TestConfigureDCR(unittest.TestCase):
                     self.assertEqual(value, expValue)
             self.assertTrue(fnd)
 
+    def getPathNames(self, ifPaths):
+        # convert list of IFPathNode lists to list of list of strings
+        pathNames = []
+        for path in ifPaths.paths:
+            if self.debug:
+                print("got path", path.getNodeNameList())
+            pathNames.append(path.getNodeNameList())
+        return pathNames
+
     def test_RcvrPF_1(self):
         "Mimics Configure('Continuum with Rcvr342')"
 
@@ -172,11 +181,9 @@ class TestConfigureDCR(unittest.TestCase):
         # fn = "test_pkl.RcvrPF_1.txt"
 
         ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_5')
+        paths = ifSys.ifPaths
 
-        # convert list of IFPathNode lists to list of list of strings
-        pathNames = []
-        for path in ifSys.paths:
-            pathNames.append([p.name for p in path])
+        pathNames = self.getPathNames(paths)
 
         # from unit test
         expPaths = [
@@ -197,7 +204,7 @@ class TestConfigureDCR(unittest.TestCase):
         # TBF: should we worry about this?
         #assert pathNames == expPaths
 
-        self.checkBandpasses(ifSys.paths, 2, 340., 1080.)
+        self.checkBandpasses(paths, 2, 340., 1080.)
 
         # compare to production mgr param values
         self.compareParams(rx, params)
@@ -234,13 +241,9 @@ class TestConfigureDCR(unittest.TestCase):
 
         ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug)
 
-        paths = ifSys.paths
-        
-        # convert list of IFPathNode lists to list of list of strings
-        pathNames = []
-        for path in paths:
-            pathNames.append([p.name for p in path])
-
+        paths = ifSys.ifPaths
+        pathNames = self.getPathNames(paths)
+       
         expPaths = [
             ['Rcvr1_2:XL', 'R1_2XL:0', 'R1_2XL:1', 'IFRouter:J2', 'SWITCH1', 'IFXS9:thru', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'],
             ['Rcvr1_2:YR', 'R1_2YR:0', 'R1_2YR:1', 'IFRouter:J18', 'SWITCH3', 'IFXS10:thru', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3']
@@ -283,11 +286,8 @@ class TestConfigureDCR(unittest.TestCase):
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
         ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug)
-
-        # convert list of IFPathNode lists to list of list of strings
-        pathNames = []
-        for path in ifSys.paths:
-            pathNames.append([p.name for p in path])
+        paths = ifSys.ifPaths
+        pathNames = self.getPathNames(paths)
 
         expPaths = [
             ['Rcvr2_3:XL', 'R2_3XL:0', 'R2_3XL:1', 'IFRouter:J5', 'SWITCH1', 'IFXS9:thru', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'],
@@ -297,7 +297,7 @@ class TestConfigureDCR(unittest.TestCase):
         assert pathNames == expPaths
 
 
-        self.checkBandpasses(ifSys.paths, 4, 2000., 6000.)
+        self.checkBandpasses(paths, 4, 2000., 6000.)
 
         self.compareParams(rx, params)
 
@@ -333,11 +333,9 @@ class TestConfigureDCR(unittest.TestCase):
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
         ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_2')
+        paths = ifSys.ifPaths
+        pathNames = self.getPathNames(paths)
 
-        # convert list of IFPathNode lists to list of list of strings
-        pathNames = []
-        for path in ifSys.paths:
-            pathNames.append([p.name for p in path])
         expPaths = [
             ['Rcvr4_6:XL', 'R4_6XL:0', 'R4_6XL:1', 'IFRouter:J9', 'SWITCH2', 'IFXS9:thru', 'IFRouter:J66', 'OpticalDriver2:J1', 'OpticalDriver2:J4', 'DCR:A_2'],
             ['Rcvr4_6:YR', 'R4_6YR:0', 'R4_6YR:1', 'IFRouter:J25', 'SWITCH4', 'IFXS10:thru', 'IFRouter:J68', 'OpticalDriver4:J1', 'OpticalDriver4:J4', 'DCR:A_4'],
@@ -347,7 +345,7 @@ class TestConfigureDCR(unittest.TestCase):
 
         self.assertEqual(pathNames, expPaths)
 
-        self.checkBandpasses(ifSys.paths, 3, 5000., 3000.)
+        self.checkBandpasses(paths, 3, 5000., 3000.)
 
         self.compareParams(rx, params)
 
@@ -383,11 +381,8 @@ class TestConfigureDCR(unittest.TestCase):
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
         ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_2')
-
-        # convert list of IFPathNode lists to list of list of strings
-        pathNames = []
-        for path in ifSys.paths:
-            pathNames.append([p.name for p in path])
+        paths = ifSys.ifPaths
+        pathNames = self.getPathNames(paths)
 
         # TBF: unit test paths go to A2 and A4, presumably because the pickle
         # file seems to have paths in random order, not sorted by backend port.
@@ -402,7 +397,7 @@ class TestConfigureDCR(unittest.TestCase):
         ]
 
         self.assertEqual(pathNames, expPaths)
-        self.checkBandpasses(ifSys.paths, 4, 9000., 3000.)
+        self.checkBandpasses(paths, 4, 9000., 3000.)
         self.compareParams(rx, params)
 
     def test_Rcvr12_18(self):
@@ -437,10 +432,12 @@ class TestConfigureDCR(unittest.TestCase):
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
         ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_2')
+        paths = ifSys.ifPaths
+        pathNames = self.getPathNames(paths)
 
         # TBF: once again, pkl file not ordered, so it chooses A2 instead of A1
 
-        self.checkBandpasses(ifSys.paths, 3, 14000., 3000.)
+        self.checkBandpasses(paths, 3, 14000., 3000.)
 
         # TBF: it seems that we are setting 4 IFRack filters in production,
         # but only two here and in our unit tests?
@@ -485,11 +482,9 @@ class TestConfigureDCR(unittest.TestCase):
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
         ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug)
+        paths = ifSys.ifPaths
+        pathNames = self.getPathNames(paths)
 
-        # convert list of IFPathNode lists to list of list of strings
-        pathNames = []
-        for path in ifSys.paths:
-            pathNames.append([p.name for p in path])
 
         # from unit test
         expPaths = [
@@ -499,7 +494,7 @@ class TestConfigureDCR(unittest.TestCase):
         
         assert pathNames == expPaths
 
-        self.checkBandpasses(ifSys.paths, 3, 32000., 6000.)
+        self.checkBandpasses(paths, 3, 32000., 6000.)
 
         # compare to production mgr param values
         self.compareParams(rx, params)

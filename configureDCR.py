@@ -1,13 +1,14 @@
 from copy import copy
 
 # from ifpaths import *
-from paths import getIFPaths
+# from paths import getIFPaths
 from StaticDefs import IF3, IFfilters, BEAM_TO_FEED_DES, FILTERS, RCVR_IF_NOMINAL, RCVR_SIDEBAND, vframe
 from StaticDefs import RCVR_FREQS, DEF_ON_SYSTEMS, DEF_OFF_SYSTEMS
 from StaticDefs import QD_AND_ACTIVE_SURFACE_ON_RCVRS, PFRCVRS, PF2RCVRS
 from Vdef import Vdef
 from MinMaxFreqs import MinMaxFreqs
 from IFPathNode import IFPathNode, IFInfo
+from IFPaths import IFPaths
 from Bandpasses import Bandpasses, Bandpass
 from dbParams import getDBParamsFromConfig
 from IFSystem import IFSystem
@@ -21,6 +22,50 @@ from ScanCoordinator import ScanCoordinator
 
 LO1_FIRST_RXS = ['Rcvr8_10']
 
+
+def getPathsFromFile(fn):
+    "Read paths from python 3 text file derived form python 2 pickle file"
+    with open(fn, 'r') as f:
+        ls = f.readlines()
+    return [eval(l) for l in ls]
+
+def getIFPaths(receiver, filepath=None):
+    "Returns an IFPaths from the pickled cabling file for given receiver"
+
+    if filepath is None:
+        fn = "zdb.pkl.%s.txt" % receiver
+    else:
+        fn = filepath
+
+    # lists of lists of strings!
+    strPaths = getPathsFromFile(fn)
+
+    ifPathNodesList = []
+    # ifPath = None
+
+    # now turns these into related ojects
+    for strPath in strPaths:
+
+        ifPathNodes = []
+        for strNode in strPath:
+            ipn = IFPathNode(strNode)
+            ifPathNodes.append(ipn)
+
+        # ifPath = IFPath(ifPathNodes)
+        ifPathNodesList.append(ifPathNodes)
+
+    ifPaths = IFPaths(ifPathNodesList)
+
+        #print(path)
+        
+        # ifPath = []
+        # for p in path:
+        #     pn = IFPathNode(p)
+        #     ifPath.append(pn)
+
+        # ifPaths.append(ifPath)
+        
+    return ifPaths
 
 def getBandpassUpToNode(path, targetNode):
     "Returns the bandpass as it appears before the given node"
@@ -54,7 +99,7 @@ def traceFreqs(paths):
         #     if node.ifInfo is not None and node.ifInfo.bandpasses is not None:
         #         bps.extend(node.ifInfo.bandpasses.bandpasses)
         # bps = Bandpasses(bps)
-        bps = aggregatePathBandpasses(path)
+        bps = path.aggregatePathBandpasses()
         bps.show()
 
 def aggregatePathBandpasses(path):
@@ -108,18 +153,18 @@ def getArbitraryFirstPath(ifPaths, rx, backend, beam, debug=False, firstBackendN
     "Choose the first path you come across that gets you from the first rx feed to the backend"
 
     # short hand
-    g = ifPaths
+    # g = ifPaths
 
    # what are the feeds for our given beam?
     feeds = BEAM_TO_FEED_DES[rx][beam]
 
     # get a path with the first feed to backend:
     # what are the graph nodes for our backend?  Sorting by port number
-    backendNodes = getSortedBackendNodes(g, backend)
+    backendNodes = ifPaths.getSortedBackendNodes(backend)
     if firstBackendNode is not None:
         backendNodes = [IFPathNode(firstBackendNode)]
         if debug:
-            print("Constained to use backend node: ", firstBackendNode)
+            print("Constrained to use backend node: ", firstBackendNode)
     backendNames = [b.name for b in backendNodes]
 
     if debug:
@@ -130,22 +175,23 @@ def getArbitraryFirstPath(ifPaths, rx, backend, beam, debug=False, firstBackendN
 
     # and get the nodes that use this port
     #starts = getPortNodes(g, feed1)
-    starts = getFrontendFeeds(g, feed1)
+    starts = ifPaths.getFrontendFeeds(feed1)
     firstFeed1Node = starts[0]
 
     if debug:
         print("feed1 nodes:", feed1, starts)
 
     if debug:
-        print("paths summary")
-        for path in g:
-            print(path[0], path[-1])
+        ifPaths.printSummary()
+        # print("paths summary")
+        # for path in paths:
+            # print(path.path[0], path.path[-1])
 
     # now simply find all the paths from the first of our feeds, to an arbitrary backend node       
     # firstBackendNode = backendNodes[0]
     feed1path = None
     for backendNode in backendNodes:
-        feed1paths = getMatchingPaths(g, firstFeed1Node, backendNode)
+        feed1paths = ifPaths.getMatchingPaths(firstFeed1Node, backendNode)
         # feed1paths = list(nx.all_simple_paths(g, source=firstFeed1Node, target=backendNode))
         if debug:
             print("found # paths between %s and %s: %d" % (firstFeed1Node, backendNode, len(feed1paths)))
@@ -175,13 +221,19 @@ def getDCRPaths(config, pathsFile=None, debug=False, firstBackendNode=None):
 
     paths = getIFPaths(rx, filepath=pathsFile)
 
+    if debug:
+        print ("Path summary:")
+        for path in paths.paths:
+            print(path.path[0], path.path[-1])
+
     # prune the paths of non-DCR backends
-    paths = [p for p in paths if 'DCR' in p[-1].name]
+    # paths = [p for p in paths if 'DCR' in p[-1].name]
+    paths.prunePathsForBackend(backend)
 
     if debug:
         print ("Path summary:")
-        for path in paths:
-            print(path[0], path[-1])
+        for path in paths.paths:
+            print(path.path[0], path.path[-1])
 
     feed1path = getArbitraryFirstPath(
         paths,
@@ -194,7 +246,7 @@ def getDCRPaths(config, pathsFile=None, debug=False, firstBackendNode=None):
 
     feeds = BEAM_TO_FEED_DES[rx][beam]
 
-    ifxs1s = getUniqueDeviceNode(feed1path, IFXS)
+    ifxs1s = feed1path.getUniqueDeviceNode(IFXS)
 
     ifxsSetting1 = None if ifxs1s is None else ifxs1s.port
 
@@ -207,40 +259,42 @@ def getDCRPaths(config, pathsFile=None, debug=False, firstBackendNode=None):
     feed2 = feeds[1]
 
     # and get the nodes that use this port
-    starts = getFrontendFeeds(paths, feed2)
+    starts = paths.getFrontendFeeds(feed2)
     firstFeed2Node = starts[0]
     
      # get all paths between this feed and other backend nodes: remove first backend node
-    backendNodes = getSortedBackendNodes(paths, backend)
-    firstBackendNode = feed1path[-1]
+    backendNodes = paths.getSortedBackendNodes(backend)
+    firstBackendNode = feed1path.getBackendNode()
     unusedBackendNodes = [b for b in backendNodes if b != firstBackendNode]
          
     # go through all possiblilities till you find a match
     feed2path = None
     for backendNode in unusedBackendNodes:
-        feed2paths = getMatchingPaths(paths, firstFeed2Node, backendNode)
+        feed2paths = paths.getMatchingPaths(firstFeed2Node, backendNode)
 
         # feed2paths = list(nx.all_simple_paths(g, source=firstFeed2Node, target=backendNode))
         if debug:
             print("found # paths between %s and %s: %d" % (firstFeed2Node, backendNode, len(feed2paths)))
-            print(feed2paths) 
+            for p in feed2paths:
+                print(p.getSummary()) 
         
         # go through these paths, and check for IFXS setting
-        for path in feed2paths:
-            ifxs2s = [p for p in path if IFXS in p.name]
+        for ifPath in feed2paths:
+            ifxs2s = [p for p in ifPath.path if IFXS in p.name]
             if len(ifxs2s) == 0:
                 ifxsSetting2 = None
             else:
                 ifxsSetting2 = ifxs2s[0].port
             if ifxsSetting2 == ifxsSetting1:
-                feed2path = path
+                feed2path = ifPath
                 break
 
         # are we done yet?
         if feed2path is not None:
             break
 
-    return feed1path, feed2path  
+    # return feed1path, feed2path  
+    return IFPaths([feed1path, feed2path])
 
 def setFreqWithVelocity(config, paths):
     "TBF: explain this"
@@ -352,7 +406,7 @@ def setIFFilters(total_bw_low, total_bw_high, ifpath):
                 # print("print found good filter at", filter_value, fLow, fHigh)
                 break
 
-        opticalDriver = getFirstLikeDeviceNode(path, "OpticalDriver")        
+        opticalDriver = path.getFirstLikeDeviceNode("OpticalDriver")        
         # if "opticalDriver" in path:
         if opticalDriver is not None:
             # update the IFRack parameters
@@ -365,7 +419,7 @@ def setIFFilters(total_bw_low, total_bw_high, ifpath):
                 opticalDriver.ifInfo.filters = []
                 opticalDriver.ifInfo.filters.append((param, filter_value))
                 # then use filter range to update the bandpass at this node
-                bp = getBandpassUpToNode(path, opticalDriver)
+                bp = path.getBandpassUpToNode(opticalDriver)
                 bpFilter = copy(bp)
                 bpFilter.filter(fLow, fHigh)
                 bpFilter.changes = "%s, (%f, %f)" % (param, fLow, fHigh)
@@ -397,7 +451,7 @@ def getLO1Bandpass(bp1, rxNode, lowerSideband=None):
     bpLO1.changes = "LO %s sideband at %f" % (sideband, loMixFreq)
     return bpLO1
 
-def calcFreqs(config, paths, debug=False):
+def calcFreqs(config, ifPaths, debug=False):
     "Make the bandpass decisions to get our signal to the backend"
 
     # we'll return what manager parameters are set here
@@ -430,7 +484,7 @@ def calcFreqs(config, paths, debug=False):
     # now we can see how the band pass changes at this stage?
 
     # 2) set the LO1 freq to match the IF1.  That seems to be 3000; always?  No.
-    freq, vfreq, _, minMaxFreqs = setFreqWithVelocity(config, paths)
+    freq, vfreq, _, minMaxFreqs = setFreqWithVelocity(config, ifPaths.paths)
     span = minMaxFreqs.maxf - minMaxFreqs.minf
     skyFreq = minMaxFreqs.avgFreqs()
     ifNom = RCVR_IF_NOMINAL[receiver]
@@ -474,12 +528,13 @@ def calcFreqs(config, paths, debug=False):
     #         params.append((paramName, filterSetting))
 
     # start calculating band pass info    
-    for path in paths:
-        path[0].ifInfo = IFInfo()
+    for path in ifPaths.paths:
+        frontendNode = path.path[0]
+        frontendNode.ifInfo = IFInfo()
         if filterSetting is not None:
-            path[0].ifInfo.filters = [(filterSetting, filterLo, filterHi)]
+            frontendNode.ifInfo.filters = [(filterSetting, filterLo, filterHi)]
         else:    
-            path[0].ifInfo.filters = []
+            frontendNode.ifInfo.filters = []
 
     # now we can see how the band pass changes by mixing in the LO1
     # LO1 params set:
@@ -495,9 +550,10 @@ def calcFreqs(config, paths, debug=False):
     
     # recrod lo details for band pass info
     loMixFreq = centerFreq + config['restfreq']
-    for path in paths:
+    for path in ifPaths.paths:
         # path[0].ifInfo = IFInfo()
-        path[0].ifInfo.lo = {'freq': loMixFreq}
+        frontendNode = path.path[0]
+        frontendNode.ifInfo.lo = {'freq': loMixFreq}
 
     # calculate LO1 paramters
     # params.append(("LO1,restFrequency", int(config["DOPPLERTRACKFREQ"])))
@@ -510,7 +566,7 @@ def calcFreqs(config, paths, debug=False):
     config['center_freq'] = centerFreq
 
     # we're now ready to setup the bandpasses in the receiver
-    for path in paths:
+    for path in ifPaths.paths:
         # setup the receiver bandpasses
         # path[0].ifInfo = IFInfo()
         # initial bandpass for this receiver
@@ -518,7 +574,7 @@ def calcFreqs(config, paths, debug=False):
         bpFeed = Bandpass(lo=low, hi=high, target=config['restfreq'])
         bpFeed.changes = 'feed'
         bps = [bpFeed]
-        rxNode = path[0]
+        rxNode = path.path[0]
 
         # TBF: check the receiver type for filter-lo1 order
         if receiver in LO1_FIRST_RXS: #["Rcvr8_10"]:
@@ -542,7 +598,7 @@ def calcFreqs(config, paths, debug=False):
     low = centerFreq - (bwTotal*.5)
     high = centerFreq + (bwTotal*.5)
     # we will record the bandpass info in this function
-    ifRackFilters = setIFFilters(low, high, paths)
+    ifRackFilters = setIFFilters(low, high, ifPaths.paths)
     # print("ifRackFilters: ", ifRackFilters)
     for f in ifRackFilters:
         params.append(f)
@@ -550,11 +606,12 @@ def calcFreqs(config, paths, debug=False):
     # now that we're done, print the bandpasses to make sure
     # that we got it right
     if debug:
-        traceFreqs(paths)
+        print("paths", ifPaths)
+        ifPaths.printFreqs()
 
     vdef = config["vdef"]
     ifSystem = IFSystem(
-        paths,
+        ifPaths,
         receiver,
         if1,
         centerFreq,
@@ -572,12 +629,12 @@ def calcFreqs(config, paths, debug=False):
 def getDCRContinuumParams(config, ifSys):
     "Set obvious manager parameters for these types of observations"
 
-    paths = ifSys.paths
+    ifPaths = ifSys.ifPaths
 
     # simple enough!
     motorRack = ('MotorRack,receiver', config['receiver'])
 
-    dcr = getDCRParams(config, paths)
+    dcr = getDCRParams(config, ifPaths)
 
     scSubsystem = getScanCoordinatorDCRContinuumSysParams(config)
  

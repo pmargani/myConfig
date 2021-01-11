@@ -1,9 +1,9 @@
 class IFSystem:
 
-    def __init__(self, paths, receiver, if1, ifCenter, tuningFreq, bwTotal, velocity, vdef, vframe):
+    def __init__(self, ifPaths, receiver, if1, ifCenter, tuningFreq, bwTotal, velocity, vdef, vframe):
 
         # [[IFPathNode]]
-        self.paths = paths
+        self.ifPaths = ifPaths
 
         # rx name
         self.receiver = receiver
@@ -19,7 +19,7 @@ class IFSystem:
         self.vdef = vdef
         self.vframe = vframe
 
-    def getFirstLikeDeviceNode(self, path, device):
-        "Retrieves first node in path that is like given device name"
-        devices = [n for n in path if device in n.name]
-        return None if len(devices) == 0 else devices[0]
+    # def getFirstLikeDeviceNode(self, path, device):
+    #     "Retrieves first node in path that is like given device name"
+    #     devices = [n for n in path if device in n.name]
+    #     return None if len(devices) == 0 else devices[0]

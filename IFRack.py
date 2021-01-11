@@ -42,7 +42,7 @@ class IFRack(Manager):
         self.mng = "IFRack"
 
         self.ifSys = ifSys
-        paths = ifSys.paths
+        paths = ifSys.ifPaths.paths
         self.receiver = config_table["receiver"]
         self.rcvr = rcvrObj  # the receiver object, not its name
         self.opt_drvr = []
@@ -72,7 +72,7 @@ class IFRack(Manager):
     def get_optical_drivers(self, paths):
         ods = []
         for path in paths:
-            for node in path:
+            for node in path.path:
                 if "OpticalDriver" in node.name:
                     ods.append(node.deviceId)
         return ods
@@ -100,7 +100,7 @@ class IFRack(Manager):
 
         for path in paths:
             # for node, j in map(None, path, range(len(path))):
-            for j, node in enumerate(path):
+            for j, node in enumerate(path.path):
                 # if isinstance(node, str):
                 if True:    
                     if "SWITCH" in node.name:
@@ -108,7 +108,7 @@ class IFRack(Manager):
                         # self.ifrack_sw_used.append(int(num))
                         # self.ifrack_sw_used.append(node.getPortNumber())
                         self.switches_used.append(node.deviceId)
-                        nextNode = path[j+1]
+                        nextNode = path.path[j+1]
                         if "IFXS" in nextNode.name:
                             # sw, num = path[j + 1].split("S")
                             # num = num.split(":")
@@ -198,7 +198,7 @@ class IFRack(Manager):
         totalBWLow = centerFreq - (self.ifSys.bwTotal*.5)
         totalBWHigh = centerFreq + (self.ifSys.bwTotal*.5)
 
-        for path in self.ifSys.paths:
+        for path in self.ifSys.ifPaths.paths:
             filterValue = "pass_all"
             for fv, fLow, fHigh in IFfilters:
                 if fLow <= totalBWLow and fHigh >= totalBWHigh:
@@ -206,7 +206,7 @@ class IFRack(Manager):
                     # print("print found good filter at", filter_value, fLow, fHigh)
                     break
 
-            opticalDriver = self.ifSys.getFirstLikeDeviceNode(path, "OpticalDriver")
+            opticalDriver = path.getFirstLikeDeviceNode("OpticalDriver")
             if opticalDriver is not None:
                 param = "filter_select,%d" % opticalDriver.deviceId
                 self.seq.add_param(self.mng, param, filterValue)
