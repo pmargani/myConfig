@@ -1,4 +1,4 @@
-from copy import copy
+from copy import copy, deepcopy
 
 from StaticDefs import DEF_ON_SYSTEMS, DEF_OFF_SYSTEMS, QD_AND_ACTIVE_SURFACE_ON_RCVRS
 from StaticDefs import PFRCVRS, PF2RCVRS
@@ -31,7 +31,7 @@ class ScanCoordinator(Manager):
     def findSubsystemSelectValues(self):
 
         # what's the default always on managers?
-        onMgrs = copy(DEF_ON_SYSTEMS[self.DEFAULT])
+        onMgrs = deepcopy(DEF_ON_SYSTEMS[self.DEFAULT])
 
         # then what's on for these observations?
         onMgrs.append(self.config['backend'])
@@ -51,7 +51,7 @@ class ScanCoordinator(Manager):
             onMgrs.extend([self.QD, self.AS])
 
         # set params for those that are off, but maybe should be on?
-        systems = copy(DEF_OFF_SYSTEMS[self.DEFAULT])
+        systems = deepcopy(DEF_OFF_SYSTEMS[self.DEFAULT])
         if not qdActiveSurfaceOn:
             systems.extend([self.QD, self.AS])
 

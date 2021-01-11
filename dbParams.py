@@ -28,6 +28,7 @@ but the DB only contains 133, triggered off 55 'meta' keywords.
 """
 
 from pprint import pprint
+from copy import deepcopy
 
 def copyRcvrParams(params, newRx):
     "Rcvr params are very similar, so copy one to make one for a new rx"
@@ -200,7 +201,7 @@ vdefParams = {
 
 def getDBParamsFromConfig(config, dct=True, tuples=False):
 
-    params = baseParams
+    params = deepcopy(baseParams)
 
     config2values = [
         (backends, 'backend'),

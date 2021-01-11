@@ -27,6 +27,7 @@ from StaticDefs import IFFiltersToBandwidth
 from StaticDefs import IFfilters
 from StaticDefs import ReceiverGroup
 from StaticDefs import ReceiverGroupPF
+from StaticDefs import RCVR_IF_NOMINAL
 
 from Manager import Manager
 
@@ -34,11 +35,14 @@ class IFRack(Manager):
 
     # def __init__(self, config_table, rcvr, ifpath, seq, prev_sws,
                  # all_backends):
-    def __init__(self, config_table, paths, rcvrObj):             
+    def __init__(self, config_table, ifSys, rcvrObj):             
         """Responsible for setting up all IFRack parameters"""
         super(IFRack, self).__init__(config_table)
 
         self.mng = "IFRack"
+
+        self.ifSys = ifSys
+        paths = ifSys.paths
         self.receiver = config_table["receiver"]
         self.rcvr = rcvrObj  # the receiver object, not its name
         self.opt_drvr = []
@@ -54,7 +58,9 @@ class IFRack(Manager):
         self.input_sw = self.get_ifrack_input_settings(paths)
         self.cross_switches_used = self.get_ifrack_cross_switches(paths)
         # if "IFRouter" in ifpath.get_list():
-            # self.set_if_filters(rcvr, ifpath, config_table)
+        # self.set_if_filters(self.rcvr, ifpath, config_table)
+        # self.set_if_filters(self.rcvr, paths, config_table)
+        self.set_if_filters()
         self.set_ifrack_switches()
 
         all_backends = ['DCR']
@@ -185,6 +191,26 @@ class IFRack(Manager):
             self.seq.add_param(self.mng, param, value)
         self.target = value
 
+    def set_if_filters(self):
+
+        centerFreq = RCVR_IF_NOMINAL[self.rcvr.rxName]
+
+        totalBWLow = centerFreq - (self.ifSys.bwTotal*.5)
+        totalBWHigh = centerFreq + (self.ifSys.bwTotal*.5)
+
+        for path in self.ifSys.paths:
+            filterValue = "pass_all"
+            for fv, fLow, fHigh in IFfilters:
+                if fLow <= totalBWLow and fHigh >= totalBWHigh:
+                    filterValue = fv
+                    # print("print found good filter at", filter_value, fLow, fHigh)
+                    break
+
+            opticalDriver = self.ifSys.getFirstLikeDeviceNode(path, "OpticalDriver")
+            if opticalDriver is not None:
+                param = "filter_select,%d" % opticalDriver.deviceId
+                self.seq.add_param(self.mng, param, filterValue)
+
     def set_if_filters_oldstyle(self, rcvr, ifpath, config_table):
         """Set IF filters"""
         total_bw_low, total_bw_high = rcvr.get_if_freq_range()
@@ -200,7 +226,7 @@ class IFRack(Manager):
             fs = "filter_select,{}".format(x)
             self.seq.add_param(self.mng, fs, self.filter_value)
 
-    def set_if_filters(self, rcvr, ifpath, config_table):
+    def set_if_filters_what(self, rcvr, ifpath, config_table):
         """Set IF filters"""
         # TBF interim solution, is IFrack bw part of path list or not?
         # Some backends yes, some backends no.

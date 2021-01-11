@@ -20,6 +20,8 @@
 #       P. O. Box 2
 #       Green Bank, WV 24944-0002 USA
 
+from copy import deepcopy
+
 # from Holography import Holography
 from StaticDefs import BW_XFER
 from StaticDefs import CHOPPER
@@ -62,7 +64,7 @@ class Receiver(Manager):
     """
 
     # def __init__(self, config_table, freq_calc, seq=None):
-    def __init__(self, config_table, tuning_freq=None):
+    def __init__(self, config_table, ifSys=None): #, tuning_freq=None, bw_total=None, if_center=None):
         """Base class for all Receivers"""
         super(Receiver, self).__init__(config_table)
 
@@ -78,12 +80,25 @@ class Receiver(Manager):
         # else:
         #     self.seq = MySeq()
 
+        self.ifSys = ifSys
+
+        self.rxName = config_table['receiver']
+        
         self.filter_setting = -1
 
         # self.config = config_table
         # self.freq_calc = freq_calc
         # self.tuning_freq = self.freq_calc.get_tuning_freq()
-        self.tuning_freq = tuning_freq
+
+        # get what we need from the ifSys
+        if ifSys is not None:
+            self.tuning_freq = ifSys.tuningFreq
+            self.bw_total = ifSys.bwTotal
+            self.if_center = ifSys.ifCenter
+            self.if1 = ifSys.if1
+
+        # TBF: is this specified in StaticDefs?
+        self.rxLO1First = ['Rcvr8_10']
 
     def setParams(self):
         "Use the current info to generate manager parameters"
@@ -93,7 +108,7 @@ class Receiver(Manager):
         self.set_tuning_freq()
 
         # we've done this already
-        # self.set_filters()
+        self.set_filters()
 
         if self.config["receiver"] in POL:
             self.set_polarization()
@@ -107,8 +122,12 @@ class Receiver(Manager):
 
 
 
-    def setReceiverDefaults(self, config):
-        """Set receiver default keyword values; stolen from ConfigValidator"""
+    def setReceiverDefaultsForConfig(self, config):
+        """
+        Set receiver default keyword values; stolen from ConfigValidator.
+        This is an exception because we aren't setting parameters, so perhaps
+        it belongs somewhere else?
+        """
         
         self.default_values = []
 
@@ -258,14 +277,26 @@ class Receiver(Manager):
 
     def set_filters(self):
         """Set receiver filters"""
+        
         found = 0
-        bw_total = self.freq_calc.get_bw_total()
-        if_center = self.freq_calc.get_center_freq()
+
+        if self.rxName in self.rxLO1First:
+            # fitler is AFTER LO1
+            if_center = self.if1
+
+        else:
+            if_center = self.if_center
+            # filter are BEFORE LO1
+            # filterFreq = tuningFreq
+
+        bw_total = self.bw_total #self.freq_calc.get_bw_total()
+        if_center = self.if_center #self.freq_calc.get_center_freq()
+
         self.if_freq_low = if_center - (0.5 * bw_total)
         self.if_freq_high = if_center + (0.5 * bw_total)
 
         if self.config["receiver"] in FILTERS:
-            param_names, filters, rcvr_type = FILTERS[self.config["receiver"]]
+            param_names, filters, rcvr_type = deepcopy(FILTERS[self.config["receiver"]])
             bw_low = self.tuning_freq - (0.5 * bw_total)
             bw_high = self.tuning_freq + (0.5 * bw_total)
             if rcvr_type == 0:  # Mixer before filter. Convert filter freq
@@ -289,16 +320,16 @@ class Receiver(Manager):
         if self.config["receiver"] in NOTCH_FILTER:
             self.seq.add_param(self.mng, "notchFilter",
                                self.config["notchfilter"])
-            if self.config["notchfilter"] != "Out":
-                bad_freqs = self.freq_calc.compare_local_frame_freqs(
-                    NOTCH_FILTER[self.config["receiver"]][0],
-                    NOTCH_FILTER[self.config["receiver"]][1]
-                )
-                if bad_freqs:
-                    print("WARNING: Frequencies adjusted to the local frame "
-                          "and velocities fall within notch filter limits")
-                    for freq in bad_freqs:
-                        print ("Frequency = ", freq)
+            # if self.config["notchfilter"] != "Out":
+            #     bad_freqs = self.freq_calc.compare_local_frame_freqs(
+            #         NOTCH_FILTER[self.config["receiver"]][0],
+            #         NOTCH_FILTER[self.config["receiver"]][1]
+            #     )
+            #     if bad_freqs:
+            #         print("WARNING: Frequencies adjusted to the local frame "
+            #               "and velocities fall within notch filter limits")
+            #         for freq in bad_freqs:
+            #             print ("Frequency = ", freq)
 
         if self.config["receiver"] in CHOPPER:
             if self.config["chopper"] == "on":
@@ -308,9 +339,9 @@ class Receiver(Manager):
 
         # the if_freq_low high is used by IFRAck to determine its filters
         # is based on the center ifnom center freq not the computed one
-        self.iffilter_center = self.freq_calc.get_ifcenter()
-        self.if_freq_low = self.iffilter_center - (0.5 * bw_total)
-        self.if_freq_high = self.iffilter_center + (0.5 * bw_total)
+        # self.iffilter_center = self.freq_calc.get_ifcenter()
+        # self.if_freq_low = self.iffilter_center - (0.5 * bw_total)
+        # self.if_freq_high = self.iffilter_center + (0.5 * bw_total)
 
     def get_filter_setting(self):
         """Return receiver filters"""

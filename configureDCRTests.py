@@ -83,6 +83,7 @@ class TestConfigureDCR(unittest.TestCase):
                 if mgr not in configParams:
                     if self.debug:
                         print("We have this manager, but config tool does not: ", mgr)
+                        print("manager set: ", paramValues)
                     ourUniqueMgrCnt += 1
                     continue
 
@@ -170,11 +171,11 @@ class TestConfigureDCR(unittest.TestCase):
         # from unit test, but no difference 
         # fn = "test_pkl.RcvrPF_1.txt"
 
-        paths, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_5')
+        ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_5')
 
         # convert list of IFPathNode lists to list of list of strings
         pathNames = []
-        for path in paths:
+        for path in ifSys.paths:
             pathNames.append([p.name for p in path])
 
         # from unit test
@@ -196,7 +197,7 @@ class TestConfigureDCR(unittest.TestCase):
         # TBF: should we worry about this?
         #assert pathNames == expPaths
 
-        self.checkBandpasses(paths, 2, 340., 1080.)
+        self.checkBandpasses(ifSys.paths, 2, 340., 1080.)
 
         # compare to production mgr param values
         self.compareParams(rx, params)
@@ -228,19 +229,13 @@ class TestConfigureDCR(unittest.TestCase):
             'pol'       : "Linear"
         }
 
-        # config['polarization'] = None
-        # config['notchfilter'] = None
-        # config['polswitch'] = None
-
-        # add these!  But how and why? TF
-        # config['polarization'] = config['pol']
-        # config['polswitch'] = 'thru'
-
         rx = config["receiver"]
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
-        paths, params = configureDCR(config, pathsFile=fn, debug=self.debug)
+        ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug)
 
+        paths = ifSys.paths
+        
         # convert list of IFPathNode lists to list of list of strings
         pathNames = []
         for path in paths:
@@ -250,23 +245,8 @@ class TestConfigureDCR(unittest.TestCase):
             ['Rcvr1_2:XL', 'R1_2XL:0', 'R1_2XL:1', 'IFRouter:J2', 'SWITCH1', 'IFXS9:thru', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'],
             ['Rcvr1_2:YR', 'R1_2YR:0', 'R1_2YR:1', 'IFRouter:J18', 'SWITCH3', 'IFXS10:thru', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3']
         ]
-        expParams = [
-            ('Rcvr1_2,leftIfFilterSwitch', '3'),
-            ('Rcvr1_2,rightIfFilterSwitch', '3'),
-            # ('LO1,restFrequency', '1400'),
-            ('LO1,velocityDefinition', 'Radio'),
-            ('LO1,sourceVelocity,position', 0.0),
-            ('LO1,restFrame', 'Local'),
-            ('LO1,ifCenterFreq', '3000.0'),
-            ('IFRack,filter_select,1', 'pass_2960_3040'),
-            ('IFRack,filter_select,3', 'pass_2960_3040')
-        ]
+
         self.assertEqual(pathNames, expPaths)
-
-
-                    
-        self.assertExpParamsInConfigParams(expParams, params)            
-        # self.assertEqual(params, expParams)
 
         self.checkBandpasses(paths, 4, 1400., 3000.)
 
@@ -298,19 +278,15 @@ class TestConfigureDCR(unittest.TestCase):
             'noisecal'  :  "lo",
             'pol'       : "Linear",
         }
-            
-        # add these!  But how and why? TF
-        # config['polarization'] = config['pol']
-        # config['polswitch'] = 'thru'
 
         rx = config["receiver"]
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
-        paths, params = configureDCR(config, pathsFile=fn, debug=self.debug)
+        ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug)
 
         # convert list of IFPathNode lists to list of list of strings
         pathNames = []
-        for path in paths:
+        for path in ifSys.paths:
             pathNames.append([p.name for p in path])
 
         expPaths = [
@@ -318,24 +294,10 @@ class TestConfigureDCR(unittest.TestCase):
             ['Rcvr2_3:YR', 'R2_3YR:0', 'R2_3YR:1', 'IFRouter:J21', 'SWITCH3', 'IFXS10:thru', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3']
         ]
 
-         # test freq. related params set
-        expParams = [
-            ('Rcvr2_3,leftIfFilterSwitch', '2'),
-            ('Rcvr2_3,rightIfFilterSwitch', '2'),
-            # ('LO1,restFrequency', 2000),
-            ('LO1,velocityDefinition', 'Radio'),
-            ('LO1,sourceVelocity,position', 0.0),
-            ('LO1,restFrame', 'Local'),
-            ('LO1,ifCenterFreq', '6000.0'),
-            ('IFRack,filter_select,1', 'pass_5960_6040'),
-            ('IFRack,filter_select,3', 'pass_5960_6040')
-        ]
-
         assert pathNames == expPaths
-        # assert params == expParams
-        self.assertExpParamsInConfigParams(expParams, params) 
 
-        self.checkBandpasses(paths, 4, 2000., 6000.)
+
+        self.checkBandpasses(ifSys.paths, 4, 2000., 6000.)
 
         self.compareParams(rx, params)
 
@@ -370,38 +332,22 @@ class TestConfigureDCR(unittest.TestCase):
         rx = config["receiver"]
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
-        paths, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_2')
+        ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_2')
 
         # convert list of IFPathNode lists to list of list of strings
-        # pathNames = []
-        # for path in paths:
-        #     print (path)
-        #     pathNames.append([p.name for p in path])
-
-        # expPaths = [
+        pathNames = []
+        for path in ifSys.paths:
+            pathNames.append([p.name for p in path])
+        expPaths = [
+            ['Rcvr4_6:XL', 'R4_6XL:0', 'R4_6XL:1', 'IFRouter:J9', 'SWITCH2', 'IFXS9:thru', 'IFRouter:J66', 'OpticalDriver2:J1', 'OpticalDriver2:J4', 'DCR:A_2'],
+            ['Rcvr4_6:YR', 'R4_6YR:0', 'R4_6YR:1', 'IFRouter:J25', 'SWITCH4', 'IFXS10:thru', 'IFRouter:J68', 'OpticalDriver4:J1', 'OpticalDriver4:J4', 'DCR:A_4'],
         #     ['Rcvr8_10:L', 'R8_10XL:0', 'R8_10XL:1', 'IFRouter:J13', 'SWITCH1', 'IFXS9:cross', 'IFRouter:J65', 'OpticalDriver1:J1', 'OpticalDriver1:J4', 'DCR:A_1'],
         #     ['Rcvr8_10:R', 'R8_10YR:0', 'R8_10YR:1', 'IFRouter:J29', 'SWITCH3', 'IFXS10:cross', 'IFRouter:J67', 'OpticalDriver3:J1', 'OpticalDriver3:J4', 'DCR:A_3']
-        # ]
-
-        #  # test freq. related params set
-        expParams = [
-            ('Rcvr8_10,leftIfFilterSwitch', 'narrowband'),
-            ('Rcvr8_10,rightIfFilterSwitch', 'narrowband'),
-            # ('LO1,restFrequency', 9000),
-            ('LO1,velocityDefinition', 'Radio'),
-            ('LO1,sourceVelocity,position', 0.0),
-            ('LO1,restFrame', 'Local'),
-            ('LO1,ifCenterFreq', '3000.0'),
-            ('IFRack,filter_select,1', 'pass_2960_3040'),
-            ('IFRack,filter_select,3', 'pass_2960_3040')
         ]
 
-        # assert pathNames == expPaths
-        # assert params == expParams
+        self.assertEqual(pathNames, expPaths)
 
-        # self.assertExpParamsInConfigParams(expParams, params) 
-
-        self.checkBandpasses(paths, 3, 5000., 3000.)
+        self.checkBandpasses(ifSys.paths, 3, 5000., 3000.)
 
         self.compareParams(rx, params)
 
@@ -436,11 +382,11 @@ class TestConfigureDCR(unittest.TestCase):
         rx = config["receiver"]
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
-        paths, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_2')
+        ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_2')
 
         # convert list of IFPathNode lists to list of list of strings
         pathNames = []
-        for path in paths:
+        for path in ifSys.paths:
             pathNames.append([p.name for p in path])
 
         # TBF: unit test paths go to A2 and A4, presumably because the pickle
@@ -455,27 +401,8 @@ class TestConfigureDCR(unittest.TestCase):
             ['Rcvr8_10:R', 'R8_10YR:0', 'R8_10YR:1', 'IFRouter:J29', 'SWITCH4', 'IFXS10:thru', 'IFRouter:J68', 'OpticalDriver4:J1', 'OpticalDriver4:J4', 'DCR:A_4']
         ]
 
-         # test freq. related params set
-        expParams = [
-            ('Rcvr8_10,leftIfFilterSwitch', 'narrowband'),
-            ('Rcvr8_10,rightIfFilterSwitch', 'narrowband'),
-            # ('LO1,restFrequency', 9000),
-            ('LO1,velocityDefinition', 'Radio'),
-            ('LO1,sourceVelocity,position', 0.0),
-            ('LO1,restFrame', 'Local'),
-            ('LO1,ifCenterFreq', '3000.0'),
-            # ('IFRack,filter_select,1', 'pass_2960_3040'),
-            # ('IFRack,filter_select,3', 'pass_2960_3040')
-        ]
-
-        assert pathNames == expPaths
-        # assert params == expParams
-        self.assertExpParamsInConfigParams(expParams, params) 
-
-        self.checkBandpasses(paths, 4, 9000., 3000.)
-
-        # TBF: IFRack,filter_select,# is determined from OpicalDriver#;
-        # since unit test paths are different, these params also differ
+        self.assertEqual(pathNames, expPaths)
+        self.checkBandpasses(ifSys.paths, 4, 9000., 3000.)
         self.compareParams(rx, params)
 
     def test_Rcvr12_18(self):
@@ -509,11 +436,11 @@ class TestConfigureDCR(unittest.TestCase):
         rx = config["receiver"]
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
-        paths, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_2')
+        ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug, firstBackendNode='DCR:A_2')
 
         # TBF: once again, pkl file not ordered, so it chooses A2 instead of A1
 
-        self.checkBandpasses(paths, 3, 14000., 3000.)
+        self.checkBandpasses(ifSys.paths, 3, 14000., 3000.)
 
         # TBF: it seems that we are setting 4 IFRack filters in production,
         # but only two here and in our unit tests?
@@ -557,11 +484,11 @@ class TestConfigureDCR(unittest.TestCase):
         rx = config["receiver"]
         fn = "zdb.201118.pkl.%s.txt" % rx  
 
-        paths, params = configureDCR(config, pathsFile=fn, debug=self.debug)
+        ifSys, params = configureDCR(config, pathsFile=fn, debug=self.debug)
 
         # convert list of IFPathNode lists to list of list of strings
         pathNames = []
-        for path in paths:
+        for path in ifSys.paths:
             pathNames.append([p.name for p in path])
 
         # from unit test
@@ -572,7 +499,7 @@ class TestConfigureDCR(unittest.TestCase):
         
         assert pathNames == expPaths
 
-        self.checkBandpasses(paths, 3, 32000., 6000.)
+        self.checkBandpasses(ifSys.paths, 3, 32000., 6000.)
 
         # compare to production mgr param values
         self.compareParams(rx, params)

@@ -10,6 +10,7 @@ from MinMaxFreqs import MinMaxFreqs
 from IFPathNode import IFPathNode, IFInfo
 from Bandpasses import Bandpasses, Bandpass
 from dbParams import getDBParamsFromConfig
+from IFSystem import IFSystem
 
 # Managers
 from Receiver import Receiver
@@ -465,11 +466,12 @@ def calcFreqs(config, paths, debug=False):
     filterSetting, filterLo, filterHi = setRxFilters(receiver, filterFreq, bwTotal)
 
     # parameters
-    # print("Receiver filter: ", filterSetting, filterLo, filterHi)
-    if filterSetting is not None:
-        for x in ['left', 'right']:
-            paramName = "%s,%sIfFilterSwitch" % (receiver, x)
-            params.append((paramName, filterSetting))
+    # print("*** Receiver filter: ", filterSetting, filterLo, filterHi)
+    # if filterSetting is not None:
+        # for x in ['left', 'right']:
+            # paramName = "%s,%sIfFilterSwitch" % (receiver, x)
+            # print(paramName, filterSetting)
+    #         params.append((paramName, filterSetting))
 
     # start calculating band pass info    
     for path in paths:
@@ -550,10 +552,27 @@ def calcFreqs(config, paths, debug=False):
     if debug:
         traceFreqs(paths)
 
-    return params
+    vdef = config["vdef"]
+    ifSystem = IFSystem(
+        paths,
+        receiver,
+        if1,
+        centerFreq,
+        tuningFreq,
+        bwTotal,
+        velocity,
+        vdef,
+        vframe
+    )
+    # return the values added paths
+    return ifSystem
 
-def getDCRContinuumParams(config, paths):
+    # return params
+
+def getDCRContinuumParams(config, ifSys):
     "Set obvious manager parameters for these types of observations"
+
+    paths = ifSys.paths
 
     # simple enough!
     motorRack = ('MotorRack,receiver', config['receiver'])
@@ -561,21 +580,21 @@ def getDCRContinuumParams(config, paths):
     dcr = getDCRParams(config, paths)
 
     scSubsystem = getScanCoordinatorDCRContinuumSysParams(config)
-
+ 
     # TBF: are these correct?
-    tuningFreq = config['restfreq']
+    tuningFreq = ifSys.tuningFreq #config['restfreq']
     centerFreq = str(config['center_freq'])
-    velocity = 0.
-    vdef = config['vdef']
+    velocity = ifSys.velocity # 0.
+    vdef = ifSys.vdef #config['vdef']
 
-    rxMgr = Receiver(config, tuning_freq=tuningFreq)
+    rxMgr = Receiver(config, ifSys) #tuning_freq=tuningFreq, bw_total=ifSys.bwTotal, if_center=tuningFreq)
     rxMgr.setParams()
 
     # s12 = 4
     s12 = None
     lo1 = LO1(config, tuningFreq, centerFreq, velocity, vdef, s12_value=s12)
 
-    ifRack = IFRack(config, paths, rxMgr)
+    ifRack = IFRack(config, ifSys, rxMgr)
     # TBF: why is this singled out to be called last in config tool?
     ifRack.set_laser_power()
 
@@ -655,19 +674,18 @@ def configureDCR(config, pathsFile=None, debug=False, firstBackendNode=None):
 
     # now add frequency info to these paths, and return some
     # related manager parameters
-    params = calcFreqs(config, paths, debug=debug)
+    ifSys = calcFreqs(config, paths, debug=debug)
 
     # Last Step: translate everything into manager parameters
+    params = []
 
     # get more parameters: First ones from the DB
     params.extend(getDBParamsFromConfig(config, dct=False, tuples=True))
 
-
     # then some really simple ones from what we've done so far    
-    params.extend(getDCRContinuumParams(config, paths))
-        
+    params.extend(getDCRContinuumParams(config, ifSys))        
 
-    return paths, params
+    return ifSys, params
 
     
 def testKFPA():
