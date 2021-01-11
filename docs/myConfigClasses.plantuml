@@ -1,7 +1,39 @@
 @startuml
 
-title Classes - Class Diagram
+allowmixing
 
+title configureDCR
+
+class IFSystem {
+  + IFPaths ifPaths
+  + receiver
+  + if1
+  + centerFreq
+  + tuningFreq
+  + totalBW
+  + velocity
+  + vframe
+  + vdef
+}
+
+class IFPaths {
+   + [IFPath] paths
+   + getFrontendFeeds(feed)
+   + getFrontendNodes()
+   + getBackendNodes()
+   + getSortedBackendNodes(backend)
+   + getMatchingPaths(start, end)
+   + prunePathsForBackend(backend)
+}
+
+class IFPath {
+   + [IFPathNode] path
+   + getBackendNode()
+   + getUniqueDeviceNode(device)
+   + getFirstLikeDeviceNode(device)
+   + aggregatePathBandpasses()
+   + getBandpassUpToNode()
+}
 
 class IFPathNode {
   + name
@@ -9,18 +41,18 @@ class IFPathNode {
   + deviceId
   + port
   + type
-  + ifInfo
+  + IFInfo ifInfo
   
 }
 
 class IFInfo {
-  + bandpasses
+  + Bandpasses bandpasses
   + filters
   + lo
 }
 
 class Bandpasses {
-  + bandpasses
+  + [Bandpass] bandpasses
   + Show()
 }
 
@@ -55,8 +87,41 @@ class MinMaxFreqs {
   + computeBW(bw)
 }
 
+class Manager {
+  + params
+}
+
+class Receiver 
+class IFRack
+class LO1
+class DCR
+class ScanCoordinator
+
+
+component configureDCR
+component dbParams
+component userConfig
+
+
+
+Manager <|-- Receiver
+Manager <|-- LO1
+Manager <|-- IFRack
+Manager <|-- ScanCoordinator
+Manager <|-- DCR
+
+IFSystem *-- IFPaths
+IFPaths "1" *-- "n" IFPath
+IFPath "1" *-- "n" IFPathNode
 IFPathNode *-- IFInfo
 IFInfo *-- Bandpasses
 Bandpasses "1" *-- "n" Bandpass
+
+configureDCR ..> dbParams: uses
+configureDCR ..> IFSystem: uses
+configureDCR ..> Manager: uses
+configureDCR ..> Vdef: uses
+configureDCR ..> MinMaxFreqs: uses
+userConfig ..> configureDCR: takes
 
 @enduml
