@@ -33,6 +33,8 @@ from StaticDefs import XFERSWITCH
 
 from StaticDefs import DUAL_POL_RCVRS
 
+from Manager import Manager
+
 rcvr_mng = "NONE"
 
 
@@ -45,16 +47,9 @@ def set_rcvr(mng):
     rcvr_mng = mng
 
 
-class MySeq:
-    "Fakes the config tools Sequencer class"
 
-    def __init__(self):
-        self.params = []
 
-    def add_param(self, mgr, name, value):
-        self.params.append((mgr, name, value))
-
-class Receiver(object):
+class Receiver(Manager):
     """
     This class is responsible for:
        * expanding a given configuration for given receiver using defaults
@@ -67,8 +62,9 @@ class Receiver(object):
     """
 
     # def __init__(self, config_table, freq_calc, seq=None):
-    def __init__(self, config_table, tuning_freq=None, seq=None):
+    def __init__(self, config_table, tuning_freq=None):
         """Base class for all Receivers"""
+        super(Receiver, self).__init__(config_table)
 
         # if config_table["backend"] == "CCB":
         #     return
@@ -77,14 +73,14 @@ class Receiver(object):
         #     if config_table["backend"] == "Holography":
         #         return
 
-        if seq is not None:
-            self.seq = seq
-        else:
-            self.seq = MySeq()
+        # if seq is not None:
+        #     self.seq = seq
+        # else:
+        #     self.seq = MySeq()
 
         self.filter_setting = -1
 
-        self.config = config_table
+        # self.config = config_table
         # self.freq_calc = freq_calc
         # self.tuning_freq = self.freq_calc.get_tuning_freq()
         self.tuning_freq = tuning_freq
@@ -109,14 +105,7 @@ class Receiver(object):
 
         # self.check_rcvr_freqs()
 
-    def getParams(self, triplet=False):
-        if triplet:
-            return self.seq.params
-        params = []   
-        # convert 3 tuple to 2 tuple
-        for mgr, param, value in self.seq.params:
-            params.append(("%s,%s" % (mgr, param), value))
-        return params
+
 
     def setReceiverDefaults(self, config):
         """Set receiver default keyword values; stolen from ConfigValidator"""

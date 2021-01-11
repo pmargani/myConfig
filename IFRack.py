@@ -28,32 +28,22 @@ from StaticDefs import IFfilters
 from StaticDefs import ReceiverGroup
 from StaticDefs import ReceiverGroupPF
 
-class MySeq:
-    "Fakes the config tools Sequencer class"
+from Manager import Manager
 
-    def __init__(self):
-        self.params = []
-
-    def add_param(self, mgr, name, value):
-        self.params.append((mgr, name, value))
-
-    def remove_param(self, x): #mgr, name, value):
-        # self.params.remove((mgr, name, value))
-        if x[0] in self.params:
-            self.params.remove(x[0])
-
-class IFRack:
+class IFRack(Manager):
 
     # def __init__(self, config_table, rcvr, ifpath, seq, prev_sws,
                  # all_backends):
     def __init__(self, config_table, paths, rcvrObj):             
         """Responsible for setting up all IFRack parameters"""
+        super(IFRack, self).__init__(config_table)
+
         self.mng = "IFRack"
         self.receiver = config_table["receiver"]
         self.rcvr = rcvrObj  # the receiver object, not its name
         self.opt_drvr = []
         # self.prev_sws = prev_sws
-        self.seq = MySeq() #seq
+        # self.seq = MySeq() #seq
         self.filter_value = "pass_all"
         self.iftarget = config_table["iftarget"]
         self.opt_drvr = self.get_optical_drivers(paths)
@@ -135,15 +125,6 @@ class IFRack:
         # print("switches used", self.switches_used)
         # print("cross switches used", self.cross_switches_used)
         # print("input_sw: ", self.input_sw)
-
-    def getParams(self, triplet=False):
-        if triplet:
-            return self.seq.params
-        params = []   
-        # convert 3 tuple to 2 tuple
-        for mgr, param, value in self.seq.params:
-            params.append(("%s,%s" % (mgr, param), value))
-        return params
 
     def set_laser_power(self):
         """Set the laser power on for ifrack paths in use"""

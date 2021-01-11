@@ -25,17 +25,10 @@ import string
 # from gbt.ygor import getConfigValue
 
 from StaticDefs import vframe
+from Manager import Manager
 
-class MySeq:
-    "Fakes the config tools Sequencer class"
 
-    def __init__(self):
-        self.params = []
-
-    def add_param(self, mgr, name, value, seq=None):
-        self.params.append((mgr, name, value))
-
-class LO1:
+class LO1(Manager):
 
     # def __init__(self, config_table, freq_calc, rcvr, seq, ifpath):
     def __init__(self, config_table, tuning_freq, center_freq, velocity, vdef, s12_value=None):
@@ -46,8 +39,10 @@ class LO1:
         # need
         # tuning_freq, velocity, vdef, center_freq
 
+        super(LO1, self).__init__(config_table)
+
         self.mng_name = "LO1"
-        self.seq = MySeq()
+        # self.seq = MySeq()
         self.delta = 0
         self.velframe = None
         self.vdef = config_table["vdef"]
@@ -81,15 +76,6 @@ class LO1:
         else:
             if "RcvrArray18_26" not in config_table["receiver"]:
                 self.set_lo1ab_off()
-
-    def getParams(self, triplet=False):
-        if triplet:
-            return self.seq.params
-        params = []   
-        # convert 3 tuple to 2 tuple
-        for mgr, param, value in self.seq.params:
-            params.append(("%s,%s" % (mgr, param), value))
-        return params
 
     # def set_sw(self, ifpath, phasecal):
     def set_sw(self, phasecal, s12_value=None):
