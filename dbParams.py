@@ -198,7 +198,7 @@ vdefParams = {
     'radio': (LO1, "velocifyDefinition", "Radio")
 }
 
-def getDBParamsFromConfig(config, dct=True):
+def getDBParamsFromConfig(config, dct=True, tuples=False):
 
     params = baseParams
 
@@ -220,6 +220,15 @@ def getDBParamsFromConfig(config, dct=True):
     # params.extend(backends[config['backends']])
     # params.extend(receivers[config['receivers']])
     # params.extend(swmodParams[config['swmod']])
+
+    # TBF: return type chaos!
+
+    if tuples:
+        tuples2=[]
+        # convert 3 tuple to 2 tuple
+        for mgr, param, value in params:
+            tuples2.append(("%s,%s" % (mgr, param), value))
+        return tuples2 
 
     return params if not dct else paramTripletList2Dict(params)
 

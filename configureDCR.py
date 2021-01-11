@@ -596,7 +596,7 @@ def getDCRContinuumParams(config, paths):
         
 def getScanCoordinatorDCRContinuumSysParams(config):
     "Use the config info to set the managers ScanCoordinator will use"
-    
+
     sc = ScanCoordinator(config)
     sc.findParameterValues()
     return sc.getParams()
@@ -660,10 +660,8 @@ def configureDCR(config, pathsFile=None, debug=False, firstBackendNode=None):
     # Last Step: translate everything into manager parameters
 
     # get more parameters: First ones from the DB
-    dbParams = getDBParamsFromConfig(config, dct=False)
-    # convert 3 tuple to 2 tuple
-    for mgr, param, value in dbParams:
-        params.append(("%s,%s" % (mgr, param), value))
+    params.extend(getDBParamsFromConfig(config, dct=False, tuples=True))
+
 
     # then some really simple ones from what we've done so far    
     params.extend(getDCRContinuumParams(config, paths))
