@@ -64,6 +64,7 @@ CM_PAIRS = {
 
 RECEIVERS = ["RcvrPF_1", "Rcvr1_2", "Rcvr2_3", "Rcvr4_6", "Rcvr8_10"]
 BACKENDS = ["VEGAS", "DCR"]
+MULTI_DEVICES = ["ConverterModule", "OpticalDriver"]
 
 class PathNode:
 
@@ -94,6 +95,26 @@ class PathNode:
             self.type = "Backend"
         else:
             self.type = None
+
+        # if it's not a front or backend, try to determine it's 
+        # 'device ID': example ConverterModule2 -> 2
+        self.deviceId = None
+        if self.type is None:
+            for d in MULTI_DEVICES:
+                if d in self.name:
+                    try:
+                        # "ConverterModule2" -> "", "2"
+                        _, self.deviceId = int(self.device.split(d))
+                        break
+                    except:
+                        pass    
+        # IF info:
+        # what are the frequency attributes at this point in the path?
+        self.ifFreq = None
+        self.skyFreq = None
+        self.bw = None
+        # are we mixing anything in?
+        self.lo = None
 
     def getPortNumber(self):
         " 'J1' => 1 "
