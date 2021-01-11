@@ -60,6 +60,7 @@ class ScanCoordinator(Manager):
             on = 1 if onBool else 0
             # param = ('ScanCoordinator,subsystemSelect,%s' % mgr, on)
             # params.append(param)
+            self.seq.add_param(self.mgrName, 'subsystemSelect,%s' % mgr, on)
 
         # make sure everything's covered
         params = []
