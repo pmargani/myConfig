@@ -38,6 +38,10 @@ Here is the same UML with some color coding hinting at the provenance of some of
 
 <img src="./docs/myConfigClassesColor.png"></img>
 
+The IFSystem and IFPaths heirarchy can be confusing.  Here we try to provide some context by labeling one of our visualizations of IF Manager parameters with their corresponding class.
+
+<img src="./docs/myConfigClassesContext.png"></img>
+
 
 From a high level, here is how configureDCR() can be broken down:
 
