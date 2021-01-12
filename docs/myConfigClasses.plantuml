@@ -100,8 +100,9 @@ class ScanCoordinator
 
 component configureDCR
 component dbParams
-component userConfig
-
+component userConfigDict
+component cablingPickleFile
+component StaticDefs
 
 
 Manager <|-- Receiver
@@ -116,12 +117,17 @@ IFPath "1" *-- "n" IFPathNode
 IFPathNode *-- IFInfo
 IFInfo *-- Bandpasses
 Bandpasses "1" *-- "n" Bandpass
+Receiver ..> StaticDefs: uses
+IFRack ..> StaticDefs: uses
+LO1 ..> StaticDefs: uses
 
 configureDCR ..> dbParams: uses
 configureDCR ..> IFSystem: uses
 configureDCR ..> Manager: uses
 configureDCR ..> Vdef: uses
 configureDCR ..> MinMaxFreqs: uses
-userConfig ..> configureDCR: takes
+configureDCR ..> StaticDefs: uses
+userConfigDict ..> configureDCR: takes
+cablingPickleFile ..> configureDCR: takes
 
 @enduml
